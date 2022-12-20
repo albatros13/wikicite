@@ -4,6 +4,8 @@ import mwparserfromhell
 
 
 def get_data(sql_context, file_in, file_out):
+    print("Step 1: Getting citations from XML dump...")
+
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
 
     wiki = sql_context.read.format('com.databricks.spark.xml').options(rowTag='page').load(file_in)

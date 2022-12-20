@@ -9,6 +9,8 @@ from pyspark.sql.functions import udf, col
 
 
 def get_newspaper_citations(sql_context, file_in, file_out):
+    print("Step 8: Getting newspaper citations...")
+
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     citations_separated = sql_context.read.parquet(file_in)
     citations_separated = citations_separated.where(col("URL").isNotNull())

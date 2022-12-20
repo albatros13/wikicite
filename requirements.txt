@@ -16,6 +16,7 @@ entrypoints
 findspark
 fuzzywuzzy
 gast
+gensim
 grpcio
 jupyter
 jupyter-client

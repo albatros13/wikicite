@@ -218,7 +218,7 @@ citation_temp_authors['author_percent_match'] = citation_temp_authors.apply(
     get_ratio, args=('joined_authors', 'retrieved_author'), axis=1)
 citation_temp_authors[['api_type', 'author_percent_match']].groupby('api_type').mean()
 
-# NK TODO cross-validate Google API return against title
+# NK TODO cross-validate Google API return against title? (Levenshtein distance)
 
 # How do the identifiers appear with each other?
 # Do we have many citations with two identifiers?
@@ -248,6 +248,7 @@ plt.xticks(rotation=90)
 plt.bar(range(len(frequency_citation)),values,tick_label=names)
 plt.show()
 
+##########################################################################
 # TODO NK where does 'wikipedia dataset with identifiers' come from?
 
 # Loading the wikipedia dataset with identifiers
@@ -435,4 +436,3 @@ print(
         arxiv_which_are_present[~arxiv_which_are_present].shape[0]
     )
 )
-

@@ -4,6 +4,7 @@ Get citations content only for certain set of titles which were based on argumen
 
 
 def filter_content(sql_context, file_in1, file_in2, file_out):
+    print("Step 10: Filtering entertainment citations...")
     citations_content = sql_context.read.parquet(file_in1)
     titles = sql_context.read.parquet(file_in2)
 

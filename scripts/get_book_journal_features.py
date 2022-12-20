@@ -3,6 +3,8 @@ import pandas as pd
 
 
 def get_book_journal_features(file_in, file_out, file_out_csv):
+    print("Step 7: Getting book and journal citations...")
+
     citations_features = pd.read_parquet(file_in, engine='pyarrow')
 
     print(type(citations_features))

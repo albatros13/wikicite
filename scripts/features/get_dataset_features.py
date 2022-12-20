@@ -2,6 +2,7 @@ from pyspark.sql.functions import col
 
 
 def get_dataset_features(sql_context, file_in1, file_in2, file_out):
+    print("Step 6: Getting dataset features...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     base_features = sql_context.read.parquet(file_in1)

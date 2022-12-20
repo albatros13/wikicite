@@ -32,11 +32,10 @@ warnings.filterwarnings("ignore")
 tqdm.pandas()
 
 from tensorflow.python.client import device_lib
-
 local_device_protos = device_lib.list_local_devices()
 print([x.name for x in local_device_protos if x.device_type == 'GPU'])
-
 np.random.seed(0)
+
 
 # Get the kinds of ids associated with each tuple
 def update_ids(x):
@@ -46,26 +45,48 @@ def update_ids(x):
     return kinds_of_ids
 
 
-def predict_citations():
-    # Get the top 150 sections which we got from training the 2.7 million citations
+def predict_citations(PROJECT_HOME, ext):
+    print("Step FINAL : Predicting citations...")
 
-    largest_sections = pd.read_csv('/dlabdata1/harshdee/largest_sections.csv', header=None)
+    # ML_MODEL = PROJECT_HOME + "/data/model/wiki.en.bin"
+    # NK TODO generalize ML_MODEL path for language extension
+    # ML_MODEL = '../data/model/xh_wiki_fasttext.txt'
+    # ML_MODEL = '../data/model/xh_wiki_fasttext.txt.wv.vectors_ngrams.npy'
+    FASTTEXT_MODEL = '../data/model/xh_wiki_fasttext.txt'
+
+    CITATIONS_FEATURES = PROJECT_HOME + 'data/features/citations_features' + ext + '.parquet'
+
+    BOOK_JOURNAL_CITATIONS = PROJECT_HOME + 'data/features/book_journal_citations' + ext + '.parquet'
+    NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/newspaper_citation_features' + ext + '.parquet'
+    ENTERTAINMENT_CITATIONS = PROJECT_HOME + 'data/features/entertainment_citations.parquet'
+    LARGEST_SECTIONS = PROJECT_HOME + 'data/features/largest_sections.csv'
+    TAG_COUNT = PROJECT_HOME + '/data/features/tag_counts.csv'
+
+    RESULT_FILE = '../data/model/result' + ext + '_{}.csv'
+    MODEL_EMBEDDEDING     = '../data/model/embedding_model' + ext + '.h5'
+    MODEL_CITATION_LOSS   = '../data/model/citation_model_loss' + ext + '_{}.json'
+    MODEL_CITATION_RESULT = '../data/model/citation_model_result' + ext + '_{}.json'
+    MODEL_CITATION_EPOCHS_H5   = '../data/model/citation_model_result' + ext + '_{}.h5'
+    MODEL_CITATION_EPOCHS_JSON = '../data/model/citation_model_epochs' + ext + '_{}.json'
+
+    # Get the top 150 sections which we got from training the 2.7 million citations
+    largest_sections = pd.read_csv(LARGEST_SECTIONS, header=None)
     largest_sections.rename({0: 'section_name', 1: 'count'}, axis=1, inplace=True)
 
-    original_tag_counts = pd.read_csv('/dlabdata1/harshdee/tag_counts.csv', header=None)
+    original_tag_counts = pd.read_csv(TAG_COUNT, header=None)
     original_tag_counts.rename({0: 'tag', 1: 'count'}, axis=1, inplace=True)
 
     # Load the pretrained embedding model on wikipedia
-    model_fasttext = FastText.load_fasttext_format('/dlabdata1/harshdee/wiki.en.bin')
-    model_embedding = load_model('/dlabdata1/harshdee/embedding_model.h5')
-    model = load_model('/dlabdata1/harshdee/results/citation_model_epochs_30.h5')
+    # model_fasttext = FastText.load_fasttext_format(FASTTEXT_MODEL)
+    model_fasttext = FastText.load(FASTTEXT_MODEL)
+    model_embedding = load_model(MODEL_EMBEDDEDING)
+    # '/dlabdata1/harshdee/results/citation_model_epochs_30.h5'
+    model = load_model(MODEL_CITATION_EPOCHS_H5).format(30)
 
     print('Loaded files and intermediary files...')
 
-    newspaper_data = pd.read_parquet(
-        '/dlabdata1/harshdee/newspapers_citations_features.parquet', engine='pyarrow')
-    entertainment_features = pd.read_parquet(
-        '/dlabdata1/harshdee/entertainment_citations_features.parquet', engine='pyarrow')
+    newspaper_data = pd.read_parquet(NEWSPAPER_CITATIONS, engine='pyarrow')
+    entertainment_features = pd.read_parquet(ENTERTAINMENT_CITATIONS, engine='pyarrow')
     print('Loaded newspaper and entertainment datasets...')
 
     def needs_a_label_or_not(row):
@@ -73,9 +94,9 @@ def predict_citations():
             'ID_list' (0), 'citations' (1), 'type_of_citation'(2)
         """
         if row[1] in newspaper_data['citations']:
-           return 'web'
+            return 'web'
         if row[1] in entertainment_features['citations']:
-           return 'web'
+            return 'web'
         if not row[0]:
             return 'NO LABEL'
 
@@ -102,7 +123,8 @@ def predict_citations():
 
         param: time_features: the features which are considered time sequence.
         """
-        feature_one = np.array([i for i in time_features if (isinstance(i, numbers.Number) or isinstance(i, long))])
+        # NK long -> int
+        feature_one = np.array([i for i in time_features if (isinstance(i, numbers.Number) or isinstance(i, int))])
         feature_two = np.array([i for i in time_features if isinstance(i, list)][0])
         return np.array([feature_one, feature_two])
 
@@ -122,14 +144,12 @@ def predict_citations():
         tags = np.array(tags)
         return np.dstack((word_embeddings_pca, tags))
 
-
-    PATH = '/dlabdata1/harshdee/citations_features.parquet/'
-    FILES = os.listdir(PATH)
+    FILES = os.listdir(CITATIONS_FEATURES)
 
     for index__, f_name in enumerate(FILES):
         if f_name == '_SUCCESS':
             continue
-        f_name_path = '{}{}'.format(PATH, f_name)
+        f_name_path = '{}{}'.format(CITATIONS_FEATURES, f_name)
         all_examples = pd.read_parquet(f_name_path, engine='pyarrow')
         print('Doing filename: {} with citations: {}'.format(f_name, all_examples.shape[0]))
         all_examples['real_citation_text'] = all_examples['citations']
@@ -140,28 +160,24 @@ def predict_citations():
         print('Preprocessing the citations for wild examples')
 
         print(all_examples.shape, wild_examples.shape, not_wild_examples.shape)
-        ## Remove the biases
-        wild_examples['citations'] = wild_examples['citations'].progress_apply(lambda x: re.sub('doi\s{0,10}=\s{0,10}([^|]+)', 'doi = ', x))
-        wild_examples['citations'] = wild_examples['citations'].progress_apply(lambda x: re.sub('isbn\s{0,10}=\s{0,10}([^|]+)', 'isbn = ', x))
-        wild_examples['citations'] = wild_examples['citations'].progress_apply(lambda x: re.sub('pmc\s{0,10}=\s{0,10}([^|]+)', 'pmc = ', x))
-        wild_examples['citations'] = wild_examples['citations'].progress_apply(lambda x: re.sub('pmid\s{0,10}=\s{0,10}([^|]+)', 'pmid = ', x))
-        wild_examples['citations'] = wild_examples['citations'].progress_apply(lambda x: re.sub('url\s{0,10}=\s{0,10}([^|]+)', 'url = ', x))
-        wild_examples['citations'] = wild_examples['citations'].progress_apply(lambda x: re.sub('work\s{0,10}=\s{0,10}([^|]+)', 'work = ', x))
-        wild_examples['citations'] = wild_examples['citations'].progress_apply(lambda x: re.sub('newspaper\s{0,10}=\s{0,10}([^|]+)', 'newspaper = ', x))
-        wild_examples['citations'] = wild_examples['citations'].progress_apply(lambda x: re.sub('website\s{0,10}=\s{0,10}([^|]+)', 'website = ', x))
+
+        # Remove the biases
+        labels = ['doi', 'isbn', 'pmc', 'pmid', 'url', 'work', 'newspaper', 'website']
+        for label in labels:
+            wild_examples['citations'] = wild_examples['citations'].apply(
+                lambda x: re.sub(label + '\s{0,10}=\s{0,10}([^|]+)', label + ' = ', x))
         print('Number of wild citations in this file: {}'.format(wild_examples.shape))
 
         print('Any sections in the parent section: {}'.format(
             not any([True if i in list(largest_sections['section_name']) else False for i in set(wild_examples['sections'])])))
+
         # Only processing auxiliary features which are going to be used in the neural network
         auxiliary_features = wild_examples[['sections', 'citations', 'ref_index', 'neighboring_words', 'total_words', 'neighboring_tags']]
 
-        ###### SECTION GENERATION ########
-        auxiliary_features['sections'] = auxiliary_features['sections'].apply(
-            lambda x: x.encode('utf-8') if isinstance(x, unicode) else str(x))
+        # SECTION GENERATION
         auxiliary_features['sections'] = auxiliary_features['sections'].astype(str)
         auxiliary_features['sections'] = auxiliary_features['sections'].progress_apply(lambda x: x.split(', '))
-        # Change section to `OTHERS` if occurence of the section is not in the 150 largest sections
+        # Change section to `OTHERS` if occurrence of the section is not in the 150 largest sections
         auxiliary_features['sections'] = auxiliary_features['sections'].progress_apply(
             lambda x: list(set(['Others' if i not in list(largest_sections['section_name']) else i for i in x]))
         )
@@ -173,13 +189,12 @@ def predict_citations():
         auxiliary_features = auxiliary_features.join(section_dummies.sum(level=0))
         auxiliary_features.drop('sections', axis=1, inplace=True)
         print('Shape of auxiliary features after section generation: {}'.format(auxiliary_features.shape))
-        ###### SECTION GENERATION ########
-
 
         citation_tag_features = auxiliary_features[['citations', 'neighboring_tags']]
         # Get the count for each POS tag so that we have an estimation as to how many are there
         tag_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_tag_features.neighboring_tags)))
         print('Is this the subset of the parent: {}'.format(set(tag_counts.index).issubset(list(original_tag_counts['tag']))))
+
         OTHER_TAGS = ['LS', '``', '$']
         citation_tag_features['neighboring_tags'] = citation_tag_features['neighboring_tags'].progress_apply(
             lambda x: [i if i not in OTHER_TAGS else 'Others' for i in x]
@@ -193,7 +208,7 @@ def predict_citations():
         citation_tag_features = pd.concat([citation_tag_features, transformed_neighboring_tags], join='inner', axis=1)
         citation_tag_features.drop('neighboring_tags', axis=1, inplace=True)
 
-        ###### GENERATE TEXT FEATURES ########
+        # GENERATE TEXT FEATURES
         citation_text_features = auxiliary_features['citations']
         # Convert the citation into a list by breaking it down into characters
         citation_text_features = citation_text_features.progress_apply(lambda x: list(x))
@@ -251,7 +266,7 @@ def predict_citations():
         print('Auxiliary features are: {}'.format(auxiliary_features.shape))
         auxiliary_features.drop(['neighboring_tags'], axis=1, inplace=True)
 
-        ### Making sets for `auxiliary` and `time sequence` features ###
+        # Making sets for `auxiliary` and `time sequence` features ###
         print('Auxiliary: {} Time: {}'.format(auxiliary_features.shape, time_sequence_features.shape))
         time_sequence_features = pd.concat([time_sequence_features['id'], time_sequence_features['citations']], axis=1)
         time_sequence_features['words_embedding'] = [np.array([]) if not isinstance(x, np.ndarray) else x for x in time_sequence_features['words_embedding']]
@@ -270,19 +285,20 @@ def predict_citations():
         test_pca = get_reduced_words_dimension(testing_time)
         print('Features for model constructed.. now running model')
 
-        ### RUN MODEL ####
+        # RUN MODEL
         prediction = model.predict([test_pca, np.array(testing_auxiliary)])
         print('Shape of prediction: {}'.format(prediction.shape))
         y_pred = np.argmax(prediction, axis=1)
         wild_examples['label_category'] = y_pred
         print('Done with model prediction for index: {}'.format(index__))
 
-        ### Result saved ####
+        # Result saved
         not_wild_examples['label_category'] = None
         columns = ['id', 'page_title', 'real_citation_text', 'ID_list', 'type_of_citation', 'label_category', 'needs_a_label']
         resultant_examples = pd.concat([wild_examples[columns], not_wild_examples[columns]]).reset_index(drop=True)
         resultant_examples.rename({'label_category': 'predicted_label_no', 'needs_a_label': 'existing_label', 'real_citation_text': 'citations'}, axis=1, inplace=True)
         print('Saving a file with f_name: {} with citations: {} with all:{} and wild: {} and non-wild: {}'.format(
             f_name, resultant_examples.shape[0], all_examples.shape[0], wild_examples.shape[0], not_wild_examples.shape[0]))
-        resultant_examples.to_csv('/dlabdata1/harshdee/results/result_{}.csv'.format(index__), index=False, encoding='utf-8')
+
+        resultant_examples.to_csv(RESULT_FILE.format(index__), index=False, encoding='utf-8')
         print('\nFile saved for part: {}\n\n'.format(index__))

@@ -10,11 +10,10 @@ from nltk import pos_tag
 from pyspark.sql.functions import explode
 from pyspark.sql.types import *
 
-# download('punkt')
-# download('averaged_perceptron_tagger')
-
 
 def extract_nlp_features(sql_context, file_in, file_out):
+    print("Step 5: Extracting NLP features...")
+
     TOTAL_NEIGHBORING_WORDS = 40
     PUNCTUATION_TO_BE_REMOVED = '"\[\\]^`|~'
     PUNC_REGEX = re.compile(r'[{}]+'.format(re.escape(PUNCTUATION_TO_BE_REMOVED)))

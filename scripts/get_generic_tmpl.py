@@ -8,6 +8,8 @@ from pyspark.sql.types import *
 
 
 def get_generic_tmpl(sql_context, file_in, file_out):
+    print("Step 2: Converting citations to generic template...")
+
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
 
     citations = sql_context.read.parquet(file_in)

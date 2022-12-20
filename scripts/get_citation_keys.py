@@ -5,6 +5,7 @@ from pyspark.sql.functions import udf, lit, col
 
 
 def get_citation_keys(sql_context, file_in, file_out):
+    print("Step 3: Creating citation dictionary...")
 
     generic_citations = sql_context.read.parquet(file_in)
     # NK changed: udf_get_keys = udf(lambda x: x.keys() if x.keys() is not None else [], ArrayType(StringType()))

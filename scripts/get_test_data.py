@@ -3,6 +3,7 @@ Get random Wikicode formatted citations based on the content of the Wikipedia pa
 """
 
 def get_test_data(sql_context, file_in, file_out, file_out_csv=None):
+    print("Testing Step 1: Sampling test data...")
     wiki = sql_context.read.format('com.databricks.spark.xml').options(rowTag='page').load(file_in)
     pages = wiki.where('ns = 0').where('redirect is null')
 
