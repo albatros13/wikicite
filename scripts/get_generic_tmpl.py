@@ -15,6 +15,7 @@ def get_generic_tmpl(sql_context, file_in, file_out):
     citations = sql_context.read.parquet(file_in)
     # citations = citations.withColumn('type_of_citation', expr('substring(type_of_citation, 3, length(type_of_citation))'))
     citations = citations.withColumn('type_of_citation', expr('substring(type_of_citation, 2, length(type_of_citation))'))
+    # NK what is the number of citations before filtering?
     citations = citations.filter(citations['type_of_citation'].isin(CITATION_TEMPLATES))
 
     # NK TODO Lua fails because of 'vauthors' instead of 'authors'

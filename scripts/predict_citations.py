@@ -66,7 +66,7 @@ def predict_citations(PROJECT_HOME, ext):
     MODEL_EMBEDDEDING     = '../data/model/embedding_model' + ext + '.h5'
     MODEL_CITATION_LOSS   = '../data/model/citation_model_loss' + ext + '_{}.json'
     MODEL_CITATION_RESULT = '../data/model/citation_model_result' + ext + '_{}.json'
-    MODEL_CITATION_EPOCHS_H5   = '../data/model/citation_model_result' + ext + '_{}.h5'
+    MODEL_CITATION_EPOCHS_H5   = '../data/model/citation_model_epochs' + ext + '_{}.h5'
     MODEL_CITATION_EPOCHS_JSON = '../data/model/citation_model_epochs' + ext + '_{}.json'
 
     # Get the top 150 sections which we got from training the 2.7 million citations

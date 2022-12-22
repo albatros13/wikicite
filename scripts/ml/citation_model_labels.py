@@ -8,11 +8,10 @@ from itertools import chain
 from collections import Counter
 from gensim.models import FastText
 from sklearn import preprocessing
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import train_test_split, StratifiedKFold
 import matplotlib.pyplot as plt
 
 from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import confusion_matrix, accuracy_score
 from sklearn.manifold import TSNE
@@ -82,18 +81,19 @@ book_features = book_journal_features[book_journal_features['actual_label'] == '
 
 # NEWSPAPERS
 
-#newspaper_data = pd.read_parquet(NEWSPAPER_CITATIONS, engine='pyarrow')
-# print('The total number of newspapers: {}'.format(newspaper_data.shape))
-#
-# print(newspaper_data.columns)
-# print(newspaper_data.head(2))
-#
-# newspaper_data = newspaper_data[[
-#     'citations', 'ref_index', 'total_words', 'neighboring_words', 'neighboring_tags', 'id', 'sections', 'type_of_citation'
-# ]]
-# newspaper_data['actual_label'] = 'web'
-#
-# print(len(newspaper_data))
+newspaper_data = pd.read_parquet(NEWSPAPER_CITATIONS, engine='pyarrow')
+print('The total number of newspapers: {}'.format(newspaper_data.shape))
+
+print(newspaper_data.columns)
+print(newspaper_data.head(2))
+
+newspaper_data = newspaper_data[[
+    'citations', 'ref_index', 'total_words', 'neighboring_words', 'neighboring_tags', 'id', 'sections', 'type_of_citation'
+]]
+newspaper_data['actual_label'] = 'web'
+
+print(len(newspaper_data))
+
 # k = 819218
 # n = 550000
 # m = 23787
@@ -125,12 +125,14 @@ n = 10
 #     lambda x: re.findall('{{\s{0,10}([^|]+)', x)[0].strip()).value_counts()
 # entertainment_features = entertainment_features.sample(n=n)
 
-# newspaper_data.drop('type_of_citation', axis=1, inplace=True)
+newspaper_data.drop('type_of_citation', axis=1, inplace=True)
 book_journal_features.drop('type_of_citation', axis=1, inplace=True)
 
-dataset_with_features = pd.concat([journal_features, book_features])
-    #, newspaper_data, entertainment_features])
+dataset_with_features = pd.concat([journal_features, book_features, newspaper_data])
+# , entertainment_features])
 print(dataset_with_features.shape)
+
+# print('actual_label', dataset_with_features['actual_label'])
 
 le = preprocessing.LabelEncoder()
 le.fit(dataset_with_features['actual_label'])
@@ -181,13 +183,13 @@ auxiliary_features['sections'] = auxiliary_features['sections'].progress_apply(
     lambda x: list(set(['Others' if i not in largest_sections else i for i in x]))
 )
 
-print("Auxilliary features", auxiliary_features.head())
-
 section_dummies = pd.get_dummies(auxiliary_features.sections.apply(pd.Series).stack())
 
 auxiliary_features = auxiliary_features.join(section_dummies.sum(level=0))
 auxiliary_features.drop('sections', axis=1, inplace=True)
-auxiliary_features.head()
+
+# print("Aux features columns:", auxiliary_features.columns)
+# print("Auxilliary features", auxiliary_features.head())
 
 # Taking the `type of citations` and one hot encoding it to get a vector
 
@@ -198,7 +200,6 @@ if 'citation_type' in auxiliary_features:
     auxiliary_features = auxiliary_features.drop('citation_type', axis=1)
     # Concat columns of the dummies along the axis with the matching index
     auxiliary_features = pd.concat([auxiliary_features, citation_type_encoding], axis=1)
-    auxiliary_features.head()
 
 # As we can see for the feature `total_number_of_words`, the mean and median **(since it is more robust in nature!)**
 # are pretty high for articles which are `not` journal or books
@@ -229,13 +230,13 @@ citation_tag_features = dataset_with_features[['id', 'citations', 'neighboring_t
 #     lambda x: x.replace("'", "").replace('[', '').replace(']', '').replace('\n', '').split(' ')
 # )
 
-print(citation_tag_features.iloc[1]['neighboring_tags'][:10])
+print("neighboring_tags", citation_tag_features.iloc[1]['neighboring_tags'][:10])
 
 # Get the count for each POS tag so that we have an estimation as to how many are there
 tag_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_tag_features.neighboring_tags)))
 
 # Considering the 10 smallest tags and checking which one does not have resemblance
-print(tag_counts.nsmallest(10))
+# print(tag_counts.nsmallest(10))
 
 tag_counts.to_csv(TAG_COUNT, header=None)
 
@@ -264,7 +265,7 @@ print(citation_tag_features.shape)
 citation_tag_features = citation_tag_features.reset_index(drop=True)
 citation_tag_features = pd.concat([citation_tag_features, transformed_neighboring_tags], axis=1)
 citation_tag_features.drop('neighboring_tags', axis=1, inplace=True)
-citation_tag_features.head()
+# print("citation_tag_features",citation_tag_features.head())
 
 # Features for the LSTM - more time sequence related
 
@@ -371,113 +372,113 @@ def generator(features, labels, batch_size):
 
 
 # Instantiate the model and generate the summary
-model = citation_embedding_model()
-print(model.summary())
-
-# Run the model with the data being generated by the generator with a batch size of 64
-# and number of epochs to be set to 15
-hist = model.fit_generator(generator(training_data, categorical_labels, 512), steps_per_epoch=4000, epochs=2)
-
-# Evaluation of embedding model
-y_predicted_proba = model.predict(np.array(testing_data))
-predicted_class = np.argmax(y_predicted_proba, axis=1)
-accuracy_score(testing_labels, predicted_class)
+# model = citation_embedding_model()
+# print(model.summary())
+#
+# # Run the model with the data being generated by the generator with a batch size of 64
+# # and number of epochs to be set to 15
+# hist = model.fit_generator(generator(training_data, categorical_labels, 512), steps_per_epoch=4000, epochs=2)
+#
+# # Evaluation of embedding model
+# y_predicted_proba = model.predict(np.array(testing_data))
+# predicted_class = np.argmax(y_predicted_proba, axis=1)
+# accuracy_score(testing_labels, predicted_class)
 
 # Save the model so that we can retrieve it later
-# model.save('/dlabdata1/harshdee/embedding_model.h5')
-# model.save(MODEL_EMBEDDED)
+# model.save(MODEL_EMBEDDING)
+
+###NK commented as irrelevant
+
 # model = load_model(MODEL_EMBEDDING)
-
-# Get the `citation_embedding` layer and get the weights for each character
-citation_layer = model.get_layer('citation_embedding')
-citation_weights = citation_layer.get_weights()[0]
-print("Citation weights:")
-print(citation_weights.shape)
-
-# An example of the first element of an embedding
-# print(citation_weights[0][:100])
-
-# Map the embedding of each character to the character in each corresponding citation and aggregate (sum)
-citation_text_features['embedding'] = citation_text_features['characters'].progress_apply(
-    lambda x: sum([citation_weights[char2ind[c]] for c in x]))
-
-# Normalize the citation embeddings so that we can check for their similarity later
-citation_text_features['embedding'] = citation_text_features['embedding'].progress_apply(
-    lambda x: x/ np.linalg.norm(x, axis=0).reshape((-1, 1)))
-
-# Make the sum of the embedding to be summed up to 1
-np.sum(np.square(citation_text_features['embedding'].iloc[0]))
-
-# Similarity Graph for citation text embeddings
-
-
-# NK TODO how to generalize?
-# NK added to see the content
-print(citation_text_features.shape)
-
-# Just considering 20 since otherwise it will be computationally extensive
-# citation_text_and_embeddings = citation_text_features[['citation', 'embedding']][:500]
 #
-# citation_text_and_embeddings['embedding'] = citation_text_and_embeddings['embedding'].progress_apply(
-#     lambda x: x[0].tolist()
-# )
+# # Get the `citation_embedding` layer and get the weights for each character
+# citation_layer = model.get_layer('citation_embedding')
+# citation_weights = citation_layer.get_weights()[0]
+# print("Citation weights:")
+# print(citation_weights.shape)
+#
+# # An example of the first element of an embedding
+# # print(citation_weights[0][:100])
+#
+# # Map the embedding of each character to the character in each corresponding citation and aggregate (sum)
+# citation_text_features['embedding'] = citation_text_features['characters'].progress_apply(
+#     lambda x: sum([citation_weights[char2ind[c]] for c in x]))
+#
+# # Normalize the citation embeddings so that we can check for their similarity later
+# citation_text_features['embedding'] = citation_text_features['embedding'].progress_apply(
+#     lambda x: x/ np.linalg.norm(x, axis=0).reshape((-1, 1)))
+#
+# # Make the sum of the embedding to be summed up to 1
+# np.sum(np.square(citation_text_features['embedding'].iloc[0]))
+#
+# # Similarity Graph for citation text embeddings
+#
+# # NK TODO how to generalize?
+# # NK added to see the content
+# print(citation_text_features.shape)
+#
+# # Just considering 20 since otherwise it will be computationally extensive
+# # citation_text_and_embeddings = citation_text_features[['citation', 'embedding']][:500]
+# #
+# # citation_text_and_embeddings['embedding'] = citation_text_and_embeddings['embedding'].progress_apply(
+# #     lambda x: x[0].tolist()
+# # )
+#
+# # def tsne_embedding_plot():
+# #     labels = []
+# #     tokens = []
+# #
+# #     index = 0
+# #     for row in citation_text_and_embeddings:
+# #         tokens.append(row['embedding'])
+# #         labels.append(str(index))
+# #         index += 1
+# #
+# #     # Perplexity takes into account the global and local features
+# #     # We are using dimensionality reduciton for 2 features and taking 2500 iterations into account
+# #     tsne_model = TSNE(perplexity=40, n_components=2, n_iter=2500, random_state=0)
+# #     new_values = tsne_model.fit_transform(tokens)
+# #
+# #     x = []
+# #     y = []
+# #     for value in new_values:
+# #         x.append(value[0])
+# #         y.append(value[1])
+# #
+# #     plt.figure(figsize=(10, 10))
+# #     for i in range(len(x)):
+# #         plt.scatter(x[i],y[i])
+# #         plt.annotate(labels[i], xy=(x[i], y[i]), xytext=(5, 2),
+# #                      textcoords='offset points', ha='right', va='bottom')
+# #     plt.show()
+# #
+# # tsne_embedding_plot()
+#
+# # # an example of citation embeddings which is close to each other
+# # citation_text_and_embeddings[citation_text_and_embeddings.index.isin([14, 477])] # (51, 243), (0, 13)
 #
 #
-# def tsne_embedding_plot():
-#     labels = []
-#     tokens = []
+# # Similiarity of 2 citations which are very similar
+# # result_similar = 1 - spatial.distance.cosine(
+# #     citation_text_and_embeddings.iloc[14]['embedding'],
+# #     citation_text_and_embeddings.iloc[477]['embedding']
+# # )
+# # print(result_similar)
 #
-#     index = 0
-#     for row in citation_text_and_embeddings:
-#         tokens.append(row['embedding'])
-#         labels.append(str(index))
-#         index += 1
+# # an example of citation embeddings which is NOT close to each other and are different
+# # print(citation_text_and_embeddings[citation_text_and_embeddings.index.isin([42, 124])]) # (6, 42)
 #
-#     # Perplexity takes into account the global and local features
-#     # We are using dimensionality reduciton for 2 features and taking 2500 iterations into account
-#     tsne_model = TSNE(perplexity=40, n_components=2, n_iter=2500, random_state=0)
-#     new_values = tsne_model.fit_transform(tokens)
+# # Similiarity of 2 citations which are not similar
+# # result_different = 1 - spatial.distance.cosine(
+# #     citation_text_and_embeddings.iloc[42]['embedding'],
+# #     citation_text_and_embeddings.iloc[124]['embedding']
+# # )
+# # print(result_different)
 #
-#     x = []
-#     y = []
-#     for value in new_values:
-#         x.append(value[0])
-#         y.append(value[1])
+# # FastText embeddings for neighboring words
 #
-#     plt.figure(figsize=(10, 10))
-#     for i in range(len(x)):
-#         plt.scatter(x[i],y[i])
-#         plt.annotate(labels[i], xy=(x[i], y[i]), xytext=(5, 2),
-#                      textcoords='offset points', ha='right', va='bottom')
-#     plt.show()
-#
-# tsne_embedding_plot()
-#
-# # an example of citation embeddings which is close to each other
-# citation_text_and_embeddings[citation_text_and_embeddings.index.isin([14, 477])] # (51, 243), (0, 13)
-
-
-# Similiarity of 2 citations which are very similar
-# result_similar = 1 - spatial.distance.cosine(
-#     citation_text_and_embeddings.iloc[14]['embedding'],
-#     citation_text_and_embeddings.iloc[477]['embedding']
-# )
-# print(result_similar)
-
-# an example of citation embeddings which is NOT close to each other and are different
-# print(citation_text_and_embeddings[citation_text_and_embeddings.index.isin([42, 124])]) # (6, 42)
-
-# Similiarity of 2 citations which are not similar
-# result_different = 1 - spatial.distance.cosine(
-#     citation_text_and_embeddings.iloc[42]['embedding'],
-#     citation_text_and_embeddings.iloc[124]['embedding']
-# )
-# print(result_different)
-
-# FastText embeddings for neighboring words
-
-# Load the pretrained embedding model on wikipedia
-# model = FastText.load_fasttext_format('/dlabdata1/harshdee/wiki.en.bin')
+# # Load the pretrained embedding model on wikipedia
+# # model = FastText.load_fasttext_format('/dlabdata1/harshdee/wiki.en.bin')
 
 # NK loading my model
 model = FastText.load(FASTTEXT_MODEL)
@@ -494,9 +495,7 @@ citation_word_features['neighboring_words'] = citation_word_features['neighborin
 # This is done in order to remove words which are of low frequency and will potentially act as noise to the model.
 
 word_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_word_features.neighboring_words)))
-
 threshold = 4
-
 x = len(word_counts)
 y = len(word_counts[word_counts <= threshold])
 print('Total words: {}\nTotal number of words whose occurrence is less than 4: {}\nDifference: {}'.format(x, y, x-y))
@@ -530,15 +529,21 @@ citation_word_features['words_embedding'] = citation_word_features['neighboring_
 # Join time sequence features with the citations dataset
 time_sequence_features = pd.concat([citation_tag_features, citation_word_features.reset_index(drop=True)], keys=['id', 'citations'], axis=1)
 time_sequence_features = time_sequence_features.loc[:, ~time_sequence_features.columns.duplicated()]
+print("Time seq features columns", time_sequence_features.columns)
+print("Time seq features", time_sequence_features.head())
 
 print('Total number of samples in time features are: {}'.format(time_sequence_features.shape))
 
-# citation_text = auxiliary_features.iloc[:,0]
-# auxiliary_features['citation_text'] = citation_text
-# auxiliary_features.drop('citation', axis=1, inplace=True)
-# auxiliary_features.rename({'citation_text': 'citation'}, axis=1, inplace=True)
+citation_text = auxiliary_features.iloc[:,0]
+auxiliary_features['citation_text'] = citation_text
 
-# Join auxiliary features with the citations dataset
+# NK removed drop citation -as there is no "citation"
+if 'citation' in auxiliary_features:
+    auxiliary_features.drop('citation', axis=1, inplace=True)
+
+auxiliary_features.rename({'citation_text': 'citation'}, axis=1, inplace=True)
+#
+# # Join auxiliary features with the citations dataset
 citation_text_features.reset_index(drop=True, inplace=True)
 auxiliary_features.reset_index(drop=True, inplace=True)
 
@@ -546,16 +551,18 @@ auxiliary_features = pd.concat([auxiliary_features, citation_text_features], key
 auxiliary_features = pd.concat([auxiliary_features['citations'], auxiliary_features['id']], axis=1)
 auxiliary_features = auxiliary_features.loc[:, ~auxiliary_features.columns.duplicated()]
 
-# Drop columns with are duplicates
+print("Aux features", auxiliary_features.head(2))
+
+# Drop columns with duplicates
 auxiliary_features.drop(['neighboring_tags', 'characters'], axis=1, inplace=True)
 
-del model
-del word_embedding_matrix
-del citation_word_features
-del citation_text_features
+# del model
+# del word_embedding_matrix
+# del citation_word_features
+# del citation_text_features
 
-gc.collect()
-
+# gc.collect()
+#
 # Making sets for `auxiliary` and `time sequence` features
 
 data = dataset_with_features[['id', 'citations', 'label_category']]
@@ -572,22 +579,24 @@ time_sequence_features = time_sequence_features.loc[:, ~time_sequence_features.c
 time_sequence_features['words_embedding'] = time_sequence_features['words_embedding'].progress_apply(
     lambda x: [x] if isinstance(x, int) else x.tolist())
 
-auxiliary_features['embedding'] = auxiliary_features['embedding'].progress_apply(
-    lambda x: [x] if isinstance(x, int) else x.tolist())
 
-del book_features
-del journal_features
-gc.collect()
+if 'embedding' in auxiliary_features:
+    auxiliary_features['embedding'] = auxiliary_features['embedding'].progress_apply(
+        lambda x: [x] if isinstance(x, int) else x.tolist())
+
+# del book_features
+# del journal_features
+# gc.collect()
 
 # Splitting the dataset into training, testing and validation
 
 # The split is done into 80-10-10 ratio so that we have more training data to train on and have validation dataset to
 # make sure that the model is working as anticipated.
 
-type(auxiliary_features)
+# type(auxiliary_features)
 
 # Get the labels which will be split later
-y = auxiliary_features.loc[:, 'label_category'].astype(int) #.tolist()
+y = auxiliary_features.loc[:, 'label_category'].astype(int).tolist()
 
 # Make a mask for auxiliary dataset to get all features except the one below
 column_mask_aux = ~auxiliary_features.columns.isin(['id', 'citations', 'label_category'])
@@ -595,16 +604,19 @@ column_mask_aux = ~auxiliary_features.columns.isin(['id', 'citations', 'label_ca
 # Get the columns of those auxiliary features and covert them into a list
 auxiliary = auxiliary_features.loc[:, column_mask_aux].values.tolist()
 
+# for i in tqdm(range(len(auxiliary))):
+#     print("AUX: ", auxiliary[i][0], auxiliary[i])
+
 # Convert them into numpy array (for Keras) and stack them (if needed) as suited for the model's format
-auxiliary = [np.array(auxiliary[i][0][0] + auxiliary[i][1:]) for i in tqdm(range(len(auxiliary)))]
+# auxiliary = [np.array(auxiliary[i][0][0] + auxiliary[i][1:]) for i in tqdm(range(len(auxiliary)))]
 
 # Make a mask for time sequences features dataset to get all features except the one below
 cols = [col for col in time_sequence_features.columns if col not in ['id', 'citations', 'label_category', 'neighboring_words']]
 stripped_tsf = time_sequence_features[cols]
 time = stripped_tsf.values.tolist()
 
-print(cols)
-print("Time length:", len(time))
+print("Time 1 columns: ", stripped_tsf.columns)
+print("Time 1: ", stripped_tsf.head())
 
 
 def make_structure_time_features(time_features):
@@ -615,6 +627,9 @@ def make_structure_time_features(time_features):
     # NK replaced long to int
     feature_one = np.array([i for i in time_features if isinstance(i, int)])
     feature_two = np.array([i for i in time_features if isinstance(i, list)][0])
+
+    # print("Feature 1:", feature_one)
+    # print("Feature 2:", feature_two)
     # NK fixing dimension
     if len(feature_two) == 1:
         feature_two = [0]*300
@@ -623,22 +638,30 @@ def make_structure_time_features(time_features):
 
 time = [make_structure_time_features(time[i]) for i in tqdm(range(len(time)))]
 
+# print("Time 2: ", time)
+
 # Instantiating PCA to 35 components since it should be equal to the size of the vector of the tags
 # pca = PCA(n_components=35)
-
-# NK vector of tags has 20
-pca = PCA(n_components=20)
+# NK Features file has 34 columns (15 are empty) - can this be the cause of problems???
+# NK vector of tags has 21 (columns with present values?)
+pca = PCA(n_components=21)
 
 
 def get_reduced_words_dimension(data):
     """
     Get the aggregated dataset of words and tags which has the
     same dimensionality using PCA.
-    
+
     :param: data: data which needs to be aggregated.
     """
     tags = [i for i, _ in data]
     word_embeddings = [j for _,j in data]
+
+    # for e in tags:
+    #     print('tags len:', len(e))
+    #
+    # for e in word_embeddings:
+    #     print('we len:', len(e))
 
     pca.fit(word_embeddings)
     word_embeddings_pca = pca.transform(word_embeddings)
@@ -656,15 +679,15 @@ print(tags.shape)
 
 time_pca = np.dstack((word_embeddings_pca, tags))
 print(time_pca.shape)
-
-del time_sequence_features
-del auxiliary_features
-
-# del data
-del word_embeddings_pca
-del tags
-del stripped_tsf
-del column_mask_aux
+#
+# del time_sequence_features
+# del auxiliary_features
+#
+# # del data
+# del word_embeddings_pca
+# del tags
+# del stripped_tsf
+# del column_mask_aux
 gc.collect()
 
 
@@ -681,17 +704,19 @@ def generator_nn(features_aux, features_time, labels, batch_size):
     #batch_features_aux = np.zeros((batch_size, 453))
     #batch_features_time =  np.zeros((batch_size, 35, 2))
     # NK trying to match with required dimensions
-    batch_features_aux = np.zeros((batch_size, 323))
-    batch_features_time = np.zeros((batch_size, 20, 2))
+    batch_features_aux = np.zeros((batch_size, 28))
+    batch_features_time = np.zeros((batch_size, 21, 2))
 
     batch_labels = np.zeros((batch_size, 3))
     # NK mine to run after stratified code snippet
-    #batch_labels = np.zeros((batch_size, 4))
+    # batch_labels = np.zeros((batch_size, 4))
 
     while True:
         for i in range(batch_size):
             # choose random index in features
             index = np.random.choice(len(features_aux), 1)[0]
+            print("INDEX", index)
+            print(features_aux[index])
             batch_features_aux[i] = features_aux[index]
             batch_features_time[i] = features_time[index]
             batch_labels[i] = labels[index]
@@ -712,13 +737,13 @@ def classification_model():
     """
     # main_input = Input(shape=(35, 2), name='time_input')
     # NK trying to match with dim=20
-    main_input = Input(shape=(20, 2), name='time_input')
+    main_input = Input(shape=(21, 2), name='time_input')
 
     lstm_out = LSTM(64)(main_input)
 
     # auxiliary_input = Input(shape=(453,), name='aux_input') ## 454 without citation type, 476 with citation type
     # NK trying to match with required dimentions
-    auxiliary_input = Input(shape=(323,), name='aux_input')
+    auxiliary_input = Input(shape=(28,), name='aux_input')
 
     # Converging the auxiliary input with the LSTM output
     x = keras.layers.concatenate([lstm_out, auxiliary_input])
@@ -735,7 +760,8 @@ def classification_model():
     opt = Adam(0.001)
     model.compile(
         optimizer=opt, loss={'main_output': 'categorical_crossentropy'},
-        loss_weights={'main_output': 1.}, metrics=['acc']
+        loss_weights={'main_output': 1.}, metrics=['acc'],
+        run_eagerly=True
     )
     return model
 
@@ -773,12 +799,12 @@ predictions = []
 
 
 # NK I created skf, it was undefined
-# skf = StratifiedKFold()
-# for index, (train_indices, val_indices) in enumerate(skf.split(X=auxiliary, y=y)):
-#     aux_train, aux_val = auxiliary[train_indices], auxiliary[val_indices]
-#     time_train, time_val = time_pca[train_indices], time_pca[val_indices]
-#     y_train = np.eye(4)[y[train_indices]]
-#     y_val = y[val_indices]
+skf = StratifiedKFold()
+for index, (train_indices, val_indices) in enumerate(skf.split(X=auxiliary, y=y)):
+    aux_train, aux_val = auxiliary[train_indices], auxiliary[val_indices]
+    time_train, time_val = time_pca[train_indices], time_pca[val_indices]
+    y_train = np.eye(4)[y[train_indices]]
+    y_val = y[val_indices]
     
 BATCH_SIZE = 256
 print('Running model with epochs: {}'.format(EPOCHS))
@@ -794,7 +820,6 @@ history_callback = model.fit_generator(
 
 history_dict = history_callback.history
 
-# f = open('/dlabdata1/harshdee/results/citation_model_loss_{}.json'.format(EPOCHS), 'w')
 f = open(MODEL_CITATION_LOSS.format(EPOCHS), 'w')
 f.write(str(history_dict))
 f.close()
@@ -813,15 +838,11 @@ res.index = ['book', 'journal', 'web']
 res.columns = ['book', 'journal', 'web']
 res['accuracy'] = accuracy
 
-# res.to_csv('/dlabdata1/harshdee/results/citation_model_result_{}.csv'.format(EPOCHS))
 res.to_csv(MODEL_CITATION_RESULT.format(EPOCHS))
-print(res)
 
-# model.save('/dlabdata1/harshdee/results/citation_model_epochs_{}.h5'.format(EPOCHS))
 model.save(MODEL_CITATION_EPOCHS_H5.format(EPOCHS))
 
 json_string = model.to_json()
-# model.save('/dlabdata1/harshdee/results/citation_model_epochs_{}.json'.format(EPOCHS))
 with open(MODEL_CITATION_EPOCHS_JSON.format(EPOCHS), "w") as json_file:
     json_file.write(json_string)
 
