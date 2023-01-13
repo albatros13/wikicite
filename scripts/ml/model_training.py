@@ -25,19 +25,20 @@ class WikiSentences:
 
 if __name__ == '__main__':
     args = {
-        'model'   : 'fasttext',
-        'lang'    : 'xh',
-        'path_in' : PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2',
-        'path_out': PROJECT_HOME + 'data/model/fasttext' + ext + '.model'
+        'model': 'fasttext',
+        'lang': 'xh',
+        'path_in': PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2',
+        'path_out': '../../data/model/wiki_fasttext{}_1.txt'.format(ext)
     }
-    # wiki_sentences = WikiSentences(args["path_in"], args["lang"])
-    #
-    # if args["model"] == 'word2vec':
-    #     model = Word2Vec(wiki_sentences, sg=1, hs=1)
-    # elif args["model"] == 'fasttext':
-    #     model = FastText(wiki_sentences, sg=1, hs=1)
-    #
-    # model.save(args["path_out"])
-    FASTTEXT_MODEL = '../../data/model/xh_wiki_fasttext.txt'
-    # FASTTEXT_MODEL = 'file://' + PROJECT_HOME + 'data/model/xh_wiki_fasttext.txt.wv.vectors_ngrams.npy'
-    model = FastText.load(FASTTEXT_MODEL)
+    wiki_sentences = WikiSentences(args["path_in"], args["lang"])
+
+    if args["model"] == 'word2vec':
+        model = Word2Vec(wiki_sentences, sg=1, hs=1)
+    elif args["model"] == 'fasttext':
+        model = FastText(wiki_sentences, sg=1, hs=1)
+
+    model.save(args["path_out"])
+
+    # FASTTEXT_MODEL = 'file://' + PROJECT_HOME + 'data/model/XXX'
+    # FASTTEXT_MODEL = '../../data/model/wiki_fasttext{}_1.txt'.format(ext)
+    # model = FastText.load(FASTTEXT_MODEL)

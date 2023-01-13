@@ -12,13 +12,15 @@ from get_newspaper_citations import get_newspaper_citations
 from pyspark import SparkContext, SQLContext
 from predict_citations import predict_citations
 
-ext = "_xh"
-INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
-
 sc = SparkContext()
 sql_context = SQLContext(sc)
 
-# files
+ext = "_xh"
+INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
+
+# ext = "_en"
+# INPUT_DATA = PROJECT_HOME + 'data/dumps/enwiki-20221201-pages-articles-multistream1.xml-p1p41242.bz2'
+
 CITATIONS = PROJECT_HOME + 'data/content/citations' + ext + '.parquet'
 CITATIONS_GENERIC = PROJECT_HOME + 'data/content/generic_citations' + ext + '.parquet'
 CITATIONS_SEPARATED = PROJECT_HOME + 'data/content/citations_separated' + ext + '.parquet'
@@ -40,39 +42,22 @@ ENTERTAINMENT_TITLES_DATA = PROJECT_HOME + 'data/content/entertainment_titles' +
 ENTERTAINMENT_CITATIONS = PROJECT_HOME+'data/content/entertainment_citations'+ext+'.parquet'
 ENTERTAINMENT_FEATURES = PROJECT_HOME + 'data/features/entertainment_features'+ext+'.parquet'
 
-# # 1
 # get_data(sql_context, INPUT_DATA, CITATIONS)
-#
-# # 2
 # get_generic_tmpl(sql_context, CITATIONS, CITATIONS_GENERIC)
-#
-# # 3
+# get_content(sql_context, INPUT_DATA, CITATIONS_CONTENT)
+
 # get_citation_keys(sql_context, CITATIONS_GENERIC, CITATIONS_SEPARATED)
 # get_citation_ids(sql_context, CITATIONS_SEPARATED, CITATIONS_IDS)
-#
-# # 4
-# get_content(sql_context, INPUT_DATA, CITATIONS_CONTENT)
-#
-# # 5
+
 # extract_nlp_features(sql_context, CITATIONS_CONTENT, BASE_FEATURES)
-#
-# # 6
 # get_dataset_features(sql_context, BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
 
-# 7
 # get_book_journal_features(CITATIONS_FEATURES, BOOK_JOURNAL_CITATIONS, BOOK_JOURNAL_CITATIONS_CSV)
 
-# 8
-get_newspaper_citations(sql_context, CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
+# get_newspaper_citations(sql_context, CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
+# get_selected_features(sql_context, BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
 
-# 9
-get_selected_features(sql_context, BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
-
-# 10
 # filter_content(CITATIONS_CONTENT, ENTERTAINMENT_TITLES_DATA, ENTERTAINMENT_CITATIONS)
-#
-# # 11
 # get_selected_features(sql_context, BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
-#
-# # MAIN
-# predict_citations(PROJECT_HOME, ext)
+
+predict_citations(PROJECT_HOME, ext)
