@@ -12,7 +12,7 @@ from pyspark.sql.types import *
 
 
 def extract_nlp_features(sql_context, file_in, file_out):
-    print("Step 5: Extracting NLP features...")
+    print("Step 3: Extracting NLP features...")
 
     TOTAL_NEIGHBORING_WORDS = 40
     PUNCTUATION_TO_BE_REMOVED = '"\[\\]^`|~'

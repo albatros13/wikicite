@@ -30,10 +30,12 @@ from keras.callbacks import ReduceLROnPlateau
 ext = "_xh"
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 
+
 BOOK_JOURNAL_CITATIONS = PROJECT_HOME + 'data/features/book_journal_citations' + ext + '.parquet'
 NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/newspaper_citation_features'+ext+'.parquet'
-ENTERTAINMENT_CITATIONS = PROJECT_HOME + 'data/features/entertainment_citations'+ext+'.parquet'
+
 TAG_COUNT = PROJECT_HOME + 'data/features/tag_counts'+ext+'.csv'
+CHAR_COUNT = PROJECT_HOME + 'data/features/char_counts'+ext+'.csv'
 
 FASTTEXT_MODEL = '../../data/model/wiki_fasttext{}.txt'.format(ext)
 MODEL_EMBEDDING = '../../data/model/embedding_model' + ext + '.h5'
@@ -93,26 +95,21 @@ def prepare_labelled_dataset():
         'citations', 'ref_index', 'total_words', 'neighboring_words', 'neighboring_tags', 'id', 'sections', 'type_of_citation'
     ]]
     newspaper_data['actual_label'] = 'web'
-
-    # k = 819218
-    # n = 550000
-    # m = 23787
-    k = 1
-    m = 1
-    n = 10
-
-    # print(newspaper_data.iloc[k]['citations']) # Example before removing the fields
     for label in labels:
         newspaper_data['citations'] = newspaper_data['citations'].progress_apply(
             lambda x: re.sub(label + '\s{0,10}=\s{0,10}([^|]+)', label + ' = ', x))
 
-    # print(newspaper_data.iloc[k]['citations']) # Example after removing the fields
     # NK TODO take sample for huge datasets?
     # newspaper_data = newspaper_data.sample(n=n)
 
     newspaper_data.drop('type_of_citation', axis=1, inplace=True)
     book_journal_features.drop('type_of_citation', axis=1, inplace=True)
 
+    book_features.drop('type_of_citation', axis=1, inplace=True)
+    journal_features.drop('type_of_citation', axis=1, inplace=True)
+
+    # dataset_with_features = pd.concat([journal_features, book_features, newspaper_data])
+    # NK - is this a mistake?
     dataset_with_features = pd.concat([journal_features, book_features, newspaper_data])
 
     le = preprocessing.LabelEncoder()
@@ -212,17 +209,16 @@ def prepare_citation_tag_features():
 
     citation_tag_features = dataset_with_features[['id', 'citations', 'neighboring_tags']]
 
-    print("neighboring_tags", citation_tag_features.iloc[1]['neighboring_tags'])
-
-    print("citation_tag_features['neighboring_tags'] type: ", type(citation_tag_features.iloc[1]['neighboring_tags'] ))
+    # print("neighboring_tags", citation_tag_features.iloc[1]['neighboring_tags'])
     citation_tag_features['neighboring_tags'] = citation_tag_features['neighboring_tags'].apply(
         lambda x: np.delete(x, np.where(x == "''"))
         # lambda x: x.replace("'", "").replace('[', '').replace(']', '').replace('\n', '').split(' ')
     )
-    print("neighboring_tags", citation_tag_features.iloc[1]['neighboring_tags'])
+    # print("neighboring_tags", citation_tag_features.iloc[1]['neighboring_tags'])
 
     # Get the count for each POS tag so that we have an estimation as to how many are there
     tag_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_tag_features.neighboring_tags)))
+    print("Tag counts:", len(tag_counts))
 
     # Considering the 10 smallest tags and checking which one does not have resemblance
     # print(tag_counts.nsmallest(10))
@@ -232,7 +228,7 @@ def prepare_citation_tag_features():
     # We are going to replace `LS`, `the 2 backquotes` and the `the dollar symbol` since they do not have too much use case
     # and do not give too much information about the context of the neighboring citation text.
 
-    OTHER_TAGS = ['LS', '``', '$']
+    OTHER_TAGS = ['LS', '``', "''", '$']
     citation_tag_features['neighboring_tags'] = citation_tag_features['neighboring_tags'].progress_apply(
         lambda x: [i if i not in OTHER_TAGS else 'Others' for i in x]
     )
@@ -285,13 +281,19 @@ def prepare_citation_text_features():
 
 
 def prepare_data(citation_text_features):
-    print("PREPARING DATA...")
+    print("PREPARING DATA...", type(citation_text_features))
     char_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_text_features.characters)))
-    # print("Character count: ", char_counts.index)
+
+    print(char_counts[:5])
+
+    char_counts.to_csv(CHAR_COUNT, header=None)
 
     # Make a dictionary for creating a mapping between the char and the corresponding index
     char2ind = {char: i for i, char in enumerate(char_counts.index)}
     # ind2char = {i: char for i, char in enumerate(char_counts.index)}
+
+    # print("Char2ind: ", char2ind)
+    # print("char2ind length: ", len(char2ind))
 
     # Map each character into the citation to its corresponding index and store it in a list
     X_char = []
@@ -323,7 +325,7 @@ def citation_embedding_model():
     main_input = Input(shape=(400,), name='characters')
     # input dim is basically the vocab size
     # emb = Embedding(input_dim=95, output_dim=300, name='citation_embedding')(main_input)
-    emb = Embedding(input_dim=96, output_dim=300, name='citation_embedding')(main_input)
+    emb = Embedding(input_dim=312, output_dim=300, name='citation_embedding')(main_input)
     rnn = Bidirectional(LSTM(20))
     x = rnn(emb)
     de = Dense(3, activation='softmax')(x)
@@ -354,17 +356,14 @@ def generator(features, categorical_labels, batch_size):
 def prepare_citation_embedding(citation_text_features, model):
     print("PREPARING CITATION EMBEDDING...")
     char_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_text_features.characters)))
-    # print("Character count: ", char_counts.index)
 
     # Make a dictionary for creating a mapping between the char and the corresponding index
     char2ind = {char: i for i, char in enumerate(char_counts.index)}
-
-    # print(An example of the first element of an embedding, citation_weights[0][:100])
-
-    # Get the `citation_embedding` layer and get the weights for each character
     citation_layer = model.get_layer('citation_embedding')
     citation_weights = citation_layer.get_weights()[0]
-    print("Citation weight dimensions:", citation_weights.shape)
+
+    # print("char2ind: ", char2ind)
+    # print("char2ind length: ", len(char2ind))
 
     # Map the embedding of each character to the character in each corresponding citation and aggregate (sum)
     citation_text_features['embedding'] = citation_text_features['characters'].progress_apply(
@@ -375,7 +374,7 @@ def prepare_citation_embedding(citation_text_features, model):
         lambda x: x / np.linalg.norm(x, axis=0).reshape((-1, 1)))
 
     # Make the sum of the embedding to be summed up to 1
-    np.sum(np.square(citation_text_features['embedding'].iloc[0]))
+    # np.sum(np.square(citation_text_features['embedding'].iloc[0]))
 
     # Just considering 20 since otherwise it will be computationally extensive
     # citation_text_and_embeddings = citation_text_features[['citation', 'embedding']][:500]
@@ -504,6 +503,7 @@ def prepare_time_sequence_features(citation_word_features, auxiliary_features):
     # print("Time seq features columns", time_sequence_features.columns)
     # print("Time seq features", time_sequence_features.head())
     print('Total number of samples in time features are: {}'.format(time_sequence_features.shape))
+    total_time_feaature_samples = time_sequence_features.shape[0]
 
     # citation_text = auxiliary_features.iloc[:, 0]
     # auxiliary_features['citation_text'] = citation_text
@@ -557,9 +557,10 @@ def generator_nn(features_aux, features_time, labels, batch_size):
     # Create empty arrays to contain batch of features and labels
     # batch_features_aux = np.zeros((batch_size, 453))
     # batch_features_time =  np.zeros((batch_size, 35, 2))
-    batch_features_aux = np.zeros((batch_size, 327))
-    batch_features_time = np.zeros((batch_size, 28, 2))
+    print("generator_nn dimensions:", features_aux.shape, features_time.shape)
 
+    batch_features_aux = np.zeros((batch_size, features_aux.shape[1]))
+    batch_features_time = np.zeros((batch_size, features_time.shape[1], 2))
     batch_labels = np.zeros((batch_size, 3))
 
     while True:
@@ -582,54 +583,21 @@ def scheduler(epoch, lr):
         return lr * math.exp(-0.1)
 
 
-def classification_model():
-    """
-    Model for classifying whether a citation is scientific or not.
-    """
-    # main_input = Input(shape=(35, 2), name='time_input')
-    main_input = Input(shape=(28, 2), name='time_input')
-
-    lstm_out = LSTM(64)(main_input)
-
-    # auxiliary_input = Input(shape=(453,), name='aux_input') ## 454 without citation type, 476 with citation type
-    auxiliary_input = Input(shape=(327,), name='aux_input')
-
-    # Converging the auxiliary input with the LSTM output
-    x = keras.layers.concatenate([lstm_out, auxiliary_input])
-
-    # 4 fully connected layer
-    x = Dense(256, activation='selu')(x)
-    x = Dense(128, activation='selu')(x)
-    x = Dense(128, activation='selu')(x)
-    x = Dense(64, activation='selu')(x)
-
-    main_output = Dense(3, activation='softmax', name='main_output')(x)
-    model = Model(inputs=[main_input, auxiliary_input], outputs=[main_output])
-
-    opt = Adam(0.001)
-    model.compile(
-        optimizer=opt, loss={'main_output': 'categorical_crossentropy'},
-        loss_weights={'main_output': 1.}, metrics=['acc'],
-        run_eagerly=True
-    )
-    return model
-
-
-def get_reduced_words_dimension(data):
+def get_reduced_words_dimension(data, tags_count):
     """
     Get the aggregated dataset of words and tags which has the
     same dimensionality using PCA.
-
     :param: data: data which needs to be aggregated.
     """
-    tags = [i for i, _ in data]
+    tags = np.array([i for i, _ in data])
+    # Instantiating PCA to 35 components since it should be equal to the size of the vector of the tags
+    # pca = PCA(n_components=35)
+    pca = PCA(n_components=tags_count)
     word_embeddings = [j for _,j in data]
     pca.fit(word_embeddings)
     word_embeddings_pca = pca.transform(word_embeddings)
     tags = np.array(tags)
-    # print("Shape word_embeddings_pca:", word_embeddings_pca.shape)
-    # print("Shape tags:", tags.shape)
-    return word_embeddings_pca, tags
+    return np.dstack((word_embeddings_pca, tags))
 
 
 def train_model(data):
@@ -687,8 +655,9 @@ citation_tag_features = prepare_citation_tag_features()
 citation_text_features = prepare_citation_text_features()
 
 data = prepare_data(citation_text_features)
-model = train_model(data)
-#model = load_model(MODEL_EMBEDDING)
+
+# model = train_model(data)
+model = load_model(MODEL_EMBEDDING)
 
 citation_text_features = prepare_citation_embedding(citation_text_features, model)
 # tsne_embedding_plot(citation_text_and_embeddings)
@@ -712,20 +681,18 @@ time_sequence_features, auxiliary_features = prepare_time_sequence_features(cita
 # make sure that the model is working as anticipated.
 
 # Make a mask for time sequences features dataset to get all features except the one below
+
 cols = [col for col in time_sequence_features.columns if col not in ['id', 'citations', 'label_category', 'neighboring_words']]
 stripped_tsf = time_sequence_features[cols]
+
+print("stripped_tsf: ", stripped_tsf.columns)
+print("stripped_tsf.shape:", stripped_tsf.shape)
+
+tags_count = stripped_tsf.shape[1]-1
 time = stripped_tsf.values.tolist()
 time = [make_structure_time_features(time[i]) for i in tqdm(range(len(time)))]
-
-# Instantiating PCA to 35 components since it should be equal to the size of the vector of the tags
-# pca = PCA(n_components=35)
-# pca = PCA(n_components=21)
-pca = PCA(n_components=28)
-
-# Apply PCA on all the sets of data to have the dimensions of the data to be the same
-word_embeddings_pca, tags = get_reduced_words_dimension(time)
-time_pca = np.dstack((word_embeddings_pca, tags))
-# print("Time pca: ", time_pca.shape)
+time_pca = get_reduced_words_dimension(time, tags_count)
+print("time_pca", time_pca.shape)
 
 # del time_sequence_features
 # del auxiliary_features
@@ -736,6 +703,38 @@ time_pca = np.dstack((word_embeddings_pca, tags))
 # del stripped_tsf
 # del column_mask_aux
 # gc.collect()
+
+def classification_model(input_length):
+    """
+    Model for classifying whether a citation is scientific or not.
+    """
+    # main_input = Input(shape=(35, 2), name='time_input')
+    main_input = Input(shape=(tags_count, 2), name='time_input')
+
+    lstm_out = LSTM(64)(main_input)
+
+    # auxiliary_input = Input(shape=(453,), name='aux_input') ## 454 without citation type, 476 with citation type
+    auxiliary_input = Input(shape=(input_length,), name='aux_input')
+
+    # Converging the auxiliary input with the LSTM output
+    x = keras.layers.concatenate([lstm_out, auxiliary_input])
+
+    # 4 fully connected layer
+    x = Dense(256, activation='selu')(x)
+    x = Dense(128, activation='selu')(x)
+    x = Dense(128, activation='selu')(x)
+    x = Dense(64, activation='selu')(x)
+
+    main_output = Dense(3, activation='softmax', name='main_output')(x)
+    model = Model(inputs=[main_input, auxiliary_input], outputs=[main_output])
+
+    opt = Adam(0.001)
+    model.compile(
+        optimizer=opt, loss={'main_output': 'categorical_crossentropy'},
+        loss_weights={'main_output': 1.}, metrics=['acc'],
+        run_eagerly=True
+    )
+    return model
 
 
 # Instantiating the classification model
@@ -771,6 +770,8 @@ def classify_citations():
     time_test = time_pca[x_test_indices]
     y_test = y[x_test_indices]
 
+    print("time_train", time_train.shape)
+
     # NK I created skf, it was undefined
     # skf = StratifiedKFold()
     # for index, (train_indices, val_indices) in enumerate(skf.split(X=auxiliary, y=y)):
@@ -783,12 +784,18 @@ def classify_citations():
     BATCH_SIZE = 8
     print('Running model with epochs: {}'.format(EPOCHS))
 
-    model = classification_model()
+    aux_train_length = aux_train.shape[1]
+    time_train_length = time_train.shape[1]
+    print("Classifier shape:",  aux_train.shape, time_train.shape, y_train.shape)
+
+    model = classification_model(aux_train_length)
+
     training_generator = generator_nn(aux_train, time_train, y_train, BATCH_SIZE)
 
     # print("Len(x_train_indices):", len(x_train_indices))
     # print("Classifier steps_per_epoch", )
-    steps = len(x_train_indices) // BATCH_SIZE
+    steps = len(x_train_indices)
+    # // BATCH_SIZE
 
     callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
     history_callback = model.fit_generator(

@@ -3,16 +3,16 @@ from pyspark.sql.types import *
 import mwparserfromhell
 
 
-def get_data(sql_context, file_in, file_out):
+def get_data(sql_context, file_in, file_out, file_out2, limit=None):
     print("Step 1: Getting citations from XML dump...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
 
     wiki = sql_context.read.format('com.databricks.spark.xml').options(rowTag='page').load(file_in)
-    pages = wiki.where('ns = 0').where('redirect is null')
+    pages_all = wiki.where('ns = 0').where('redirect is null')
 
     # Get only ID, title, revision text's value which we are interested in
-    pages = pages['id', 'title', 'revision.text', 'revision.id', 'revision.parentid']
+    pages = pages_all['id', 'title', 'revision.text', 'revision.id', 'revision.parentid']
     pages = pages.toDF('id', 'title', 'content', 'r_id', 'r_parentid')
 
     def get_citations(page_content):
@@ -63,4 +63,19 @@ def get_data(sql_context, file_in, file_out):
     split_col = split(cite_df['citations'], '\|')
     cite_df = cite_df.withColumn('type_of_citation', lower(trim(split_col.getItem(0))))
     cite_df = cite_df.withColumn('type_of_citation', regexp_replace('type_of_citation', '\{\{', ''))
+
+    if limit:
+        cite_df = cite_df.limit(limit)
     cite_df.write.mode('overwrite').parquet(file_out)
+
+    #################################################
+
+    print("Step 2: Getting content from XML dump...")
+
+    # Get only ID, title, revision text's value which we are interested in
+    pages = pages_all['id', 'title', 'revision.text']
+    pages = pages.toDF('id', 'page_title', 'content')
+
+    if limit:
+        pages = pages.limit(limit)
+    pages.write.mode('overwrite').parquet(file_out2)

@@ -1,22 +1,16 @@
-# -*- encoding: utf-8 -*-
 from __future__ import unicode_literals
-
 import re
 import os
 import lupa
-import json
 import mwparserfromhell
 import importlib
-from time import sleep
-
-from . import en
-from . import it
-
 
 lua = lupa.LuaRuntime()
 luacode = ''
 luafilepath = os.path.join(os.path.dirname(__file__), 'cs1.lua')
-with open(luafilepath, 'r') as f:
+# NK
+# with open(luafilepath, 'r') as f:
+with open(luafilepath, 'r', encoding='utf-8') as f:
     luacode = f.read()
 
 # MediaWiki utilities simulated by Python wrappers
@@ -32,17 +26,22 @@ def lua_to_python_re(regex):
     rx = re.sub('%x', '[0-9A-F]', rx) # hexa chars
     return rx
 
+
 def ustring_match(string, regex):
     return re.match(lua_to_python_re(regex), string) is not None
+
 
 def ustring_len(string):
     return len(string)
 
+
 def uri_encode(string):
     return string
 
+
 def text_split(string, pattern):
     return lua.table_from(re.split(lua_to_python_re(pattern), string))
+
 
 def nowiki(string):
     try:
@@ -51,8 +50,8 @@ def nowiki(string):
     except (ValueError, mwparserfromhell.parser.ParserError):
         return string
 
-# Conversion utilities, from lua objects to python objects
 
+# Conversion utilities, from lua objects to python objects
 def is_int(val):
     """
     Is this lua object an integer?
@@ -65,6 +64,7 @@ def is_int(val):
 
 
 wrapped_type = lua.globals().type
+
 
 def toPyDict(lua_val):
     """
@@ -89,6 +89,7 @@ def toPyDict(lua_val):
     else:
         return lua_val
 
+
 def parse_citation_dict(arguments, template_name='citation'):
     """
     Parses the Wikipedia citation into a python dict.
@@ -104,14 +105,25 @@ def parse_citation_dict(arguments, template_name='citation'):
         template_name = template_name.lower()
 
     arguments['CitationClass'] = template_name
+    if 'vauthors' in arguments:
+        arguments['authors'] = arguments.pop('vauthors')
+    if 'veditors' in arguments:
+        arguments['editors'] = arguments.pop('veditors')
+
     lua_table = lua.table_from(arguments)
-    lua_result = lua.eval(luacode)(lua_table,
-            ustring_match,
-            ustring_len,
-            uri_encode,
-            text_split,
-            nowiki)
+    try:
+        lua_result = lua.eval(luacode)(lua_table,
+                ustring_match,
+                ustring_len,
+                uri_encode,
+                text_split,
+                nowiki)
+    except Exception as e:
+        print("Something wrong with Lua: ", template_name, arguments)
+        return {'Title': 'Citation generic template not possible'}
+
     return toPyDict(lua_result)
+
 
 def params_to_dict(params):
     """
@@ -131,9 +143,14 @@ def is_citation_template_name(template_name, lang='en'):
     if not template_name:
         return False
 
-    template_name = template_name.replace('_', ' ')
-    template_name = template_name.strip()
-    template_name = template_name[0].upper()+template_name[1:]
+    try:
+        # template_name = template_name.replace('_', ' ')
+        template_name = template_name.strip()
+        template_name = template_name[0].upper()+template_name[1:]
+    except Exception as e:
+        print("Error in template_name pre-processing:", template_name)
+        print(e)
+        return False
 
     lang_module = importlib.import_module('.' + lang, package='wikiciteparser')
     if template_name in lang_module.citation_template_names:
@@ -149,8 +166,10 @@ def parse_citation_template(template, lang='en'):
     :returns: a dict representing the template, or None if the template
         provided does not represent a citation.
     """
-    name = unicode(template.name)
+    # NK
+    # name = unicode(template.name)
+    name = template.name
     if not is_citation_template_name(name, lang):
-        return
-    return parse_citation_dict(params_to_dict(template.params),
-                               template_name=name)
+        print("Not a citation template:", name)
+        return {}
+    return parse_citation_dict(params_to_dict(template.params), template_name=name)

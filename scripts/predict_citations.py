@@ -35,6 +35,7 @@ def predict_citations(PROJECT_HOME, ext):
     NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/newspaper_citation_features{}.parquet'.format(ext)
     LARGEST_SECTIONS = PROJECT_HOME + 'data/features/largest_sections{}.csv'.format(ext)
     TAG_COUNT = PROJECT_HOME + '/data/features/tag_counts{}.csv'.format(ext)
+    CHAR_COUNT = PROJECT_HOME + '/data/features/char_counts{}.csv'.format(ext)
 
     MODEL_EMBEDDEDING = '../data/model/embedding_model{}.h5'.format(ext)
     RESULT_FILE = '../data/model/result' + ext + '_{}.csv'
@@ -93,6 +94,9 @@ def predict_citations(PROJECT_HOME, ext):
         # NK long -> int
         feature_one = np.array([i for i in time_features if (isinstance(i, numbers.Number) or isinstance(i, int))])
         feature_two = np.array([i for i in time_features if isinstance(i, list)][0])
+
+        # print("make_structure_time_features:", len(feature_one), feature_one[0])
+
         return np.array([feature_one, feature_two])
 
     def get_reduced_words_dimension(data):
@@ -104,12 +108,13 @@ def predict_citations(PROJECT_HOME, ext):
         """
         tags = [i for i, _ in data]
         word_embeddings = [j for _,j in data]
-        pca = PCA(n_components=35)
+        # pca = PCA(n_components=35)
+        pca = PCA(n_components=34)
         pca.fit(word_embeddings)
 
         word_embeddings_pca = pca.transform(word_embeddings)
         tags = np.array(tags)
-        return np.dstack((word_embeddings_pca, tags))
+        return word_embeddings_pca, tags
 
     # Select auxiliary features which are going to be used in the neural network
     def prepare_auxiliary_features(wild_examples):
@@ -135,52 +140,85 @@ def predict_citations(PROJECT_HOME, ext):
 
     # Get the count for each POS tag so that we have an estimation as to how many are there
     def prepare_citation_tag_features(auxiliary_features):
+        print("PREPARING CITATION TAG FEATURES...")
         citation_tag_features = auxiliary_features[['citations', 'neighboring_tags']]
 
-        tag_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_tag_features.neighboring_tags)))
-        print('Is this the subset of the parent: {}'.format(
-            set(tag_counts.index).issubset(list(original_tag_counts['tag']))))
+        print("neighboring_tags", citation_tag_features.iloc[1]['neighboring_tags'])
 
-        OTHER_TAGS = ['LS', '``', '$']
+        citation_tag_features['neighboring_tags'] = citation_tag_features['neighboring_tags'].apply(
+            lambda x: np.delete(x, np.where(x == "''"))
+            # lambda x: x.replace("'", "").replace('[', '').replace(']', '').replace('\n', '').split(' ')
+        )
+        print("neighboring_tags", citation_tag_features.iloc[1]['neighboring_tags'])
+
+        tag_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_tag_features.neighboring_tags)))
+
+        print("Tag counts:", len(tag_counts))
+
+        original_tag_set = set(list(original_tag_counts['tag']))
+
+        is_subset = set(tag_counts.index).issubset(original_tag_set)
+        print('Is this the subset of the parent: {}'.format(is_subset))
+        # if not is_subset:
+        #     # NK replace unknown tags to be able to proceed or it won't be possible to use the pre-trained nn?
+        #     # The nn trained on sample with specific features can generally contain less tags
+        #     citation_tag_features['neighboring_tags'] = citation_tag_features['neighboring_tags'].progress_apply(
+        #         lambda x: [i if i in original_tag_set else 'Others' for i in x])
+        #     # print("Revised citation_tag_features: ", citation_tag_features['neighboring_tags'][:100])
+
+        OTHER_TAGS = ['LS', '``',  "''", '$']
         citation_tag_features['neighboring_tags'] = citation_tag_features['neighboring_tags'].progress_apply(
             lambda x: [i if i not in OTHER_TAGS else 'Others' for i in x]
         )
         citation_tag_features['neighboring_tags'] = [['Others'] if not x else x for x in
                                                      citation_tag_features['neighboring_tags']]
-        cv = CountVectorizer()  # Instantiate the vectorizer
+        cv = CountVectorizer()
         citation_tag_features['neighboring_tags'] = citation_tag_features['neighboring_tags'].progress_apply(
             lambda x: " ".join(x))
         transformed_neighboring_tags = cv.fit_transform(citation_tag_features['neighboring_tags'])
-        transformed_neighboring_tags = pd.DataFrame(transformed_neighboring_tags.toarray(),
-                                                    columns=cv.get_feature_names())
+        transformed_neighboring_tags = pd.DataFrame(transformed_neighboring_tags.toarray(), columns=cv.get_feature_names())
+
+        print("Transformed neighbouring tags dimensions: ", transformed_neighboring_tags.shape)
+        print("Citation tag features dimensions: ", citation_tag_features.shape)
+
         citation_tag_features = citation_tag_features.reset_index(drop=True)
-        citation_tag_features = pd.concat([citation_tag_features, transformed_neighboring_tags], join='inner',
-                                          axis=1)
+        citation_tag_features = pd.concat([citation_tag_features, transformed_neighboring_tags], join='inner', axis=1)
         citation_tag_features.drop('neighboring_tags', axis=1, inplace=True)
+        # print("Prepared citation_tag_features: ", citation_tag_features[:100])
+        print("PREPARING CITATION TAG FEATURES - DONE")
         return citation_tag_features
 
     # Generate text features
     def prepare_citation_text_features(auxiliary_features):
         citation_text_features = auxiliary_features['citations']
+
         # Convert the citation into a list by breaking it down into characters
         citation_text_features = citation_text_features.progress_apply(lambda x: list(x))
-        char_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_text_features)))
-        char2ind = {char: i for i, char in enumerate(char_counts.index)}
-        ind2char = {i: char for i, char in enumerate(char_counts.index)}
+
+        # NK I replaced char_counts as the pre-trained nn cannot deal with unknown characters
+        # char_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_text_features)))
+        char_counts = pd.read_csv(CHAR_COUNT, header=None)
+        # print("char_count: ", char_counts[:5])
+
+        char2ind = {char[0]: i for i, char in enumerate(char_counts.values)}
         # Map each character into the citation to its corresponding index and store it in a list
-        X_char = []
-        for citation in citation_text_features:
-            citation_chars = []
-            for character in citation:
-                citation_chars.append(char2ind[character])
-            X_char.append(citation_chars)
-        X_char = pad_sequences(X_char, maxlen=400)
+        # X_char = []
+        # for citation in citation_text_features:
+        #     citation_chars = []
+        #     for character in citation:
+        #         citation_chars.append(char2ind[character])
+        #     X_char.append(citation_chars)
+        # X_char = pad_sequences(X_char, maxlen=400)
+        # print("X_char", X_char)
+
         citation_layer = model_embedding.get_layer('citation_embedding')
         citation_weights = citation_layer.get_weights()[0]
         citation_text_features = citation_text_features.to_frame()
+
         # Map the embedding of each character to the character in each corresponding citation and aggregate (sum)
         citation_text_features['embedding'] = citation_text_features['citations'].progress_apply(
-            lambda x: sum([citation_weights[char2ind[c]] for c in x]))
+            lambda x: sum([(citation_weights[char2ind[c]] if c in char2ind else 0) for c in x]))
+
         # Normalize the citation embeddings so that we can check for their similarity later
         citation_text_features['embedding'] = citation_text_features['embedding'].progress_apply(
             lambda x: x / np.linalg.norm(x, axis=0).reshape((-1, 1)))
@@ -203,21 +241,32 @@ def predict_citations(PROJECT_HOME, ext):
         )
         citation_word_features['neighboring_words'] = [['<UNK>'] if not x else x for x in
                                                        citation_word_features['neighboring_words']]
+
+        # NK TODO replace words that are unknown to nn to <UNK> too
+
         words = pd.Series(Counter(chain.from_iterable(x for x in citation_word_features.neighboring_words))).index
         word2ind = {w: i for i, w in enumerate(words)}
-        ind2words = {i: w for i, w in enumerate(words)}
         word_embedding_matrix = np.zeros((len(word2ind), 300))
+
+        # for w in tqdm(word2ind):
+        #     word_embedding_matrix[word2ind[w]] = model_fasttext.wv[w]
         for w in tqdm(word2ind):
-            word_embedding_matrix[word2ind[w]] = model_fasttext.wv[w]
+            index = word2ind[w]
+            # NK fixed reshaping ?
+            word_embedding_matrix[index][:len(model_fasttext.wv[w])] = model_fasttext.wv[w]
+
         citation_word_features['words_embedding'] = citation_word_features['neighboring_words'].progress_apply(
             lambda x: sum([word_embedding_matrix[word2ind[w]] for w in x]))
+        return citation_word_features
 
     FILES = os.listdir(CITATIONS_FEATURES)
 
     for index__, f_name in enumerate(FILES):
         if f_name == '_SUCCESS':
             continue
-        f_name_path = '{}{}'.format(CITATIONS_FEATURES, f_name)
+        if f_name.endswith('.crc'):
+            continue
+        f_name_path = '{}/{}'.format(CITATIONS_FEATURES, f_name)
         all_examples = pd.read_parquet(f_name_path, engine='pyarrow')
         print('Doing filename: {} with citations: {}'.format(f_name, all_examples.shape[0]))
         all_examples['real_citation_text'] = all_examples['citations']
@@ -245,7 +294,8 @@ def predict_citations(PROJECT_HOME, ext):
         citation_word_features = prepare_citation_word_features(auxiliary_features)
 
         # Join time sequence features with the citations dataset
-        time_sequence_features = pd.concat([citation_tag_features, citation_word_features.reset_index(drop=True)], keys=['id', 'citations'], axis=1)
+        time_sequence_features = pd.concat([citation_tag_features, citation_word_features
+                                           .reset_index(drop=True)], keys=['id', 'citations'], axis=1)
         time_sequence_features = time_sequence_features.loc[:, ~time_sequence_features.columns.duplicated()]
         print('Total number of samples in time features are: {}'.format(time_sequence_features.shape))
 
@@ -272,11 +322,20 @@ def predict_citations(PROJECT_HOME, ext):
 
         cols = [col for col in time_sequence_features.columns if col not in ['citations', 'neighboring_words']]
         stripped_tsf = time_sequence_features[cols]
+
+        # NK This is important: if the number of distinct word tags differs from the trained model, prediction will fail
+        print("stripped_tsf: ", stripped_tsf.columns)
+        print("stripped_tsf.shape:", stripped_tsf.shape)
+
         testing_time = stripped_tsf.values.tolist()
         testing_time = [make_structure_time_features(testing_time[i]) for i in tqdm(range(len(testing_time)))]
-        test_pca = get_reduced_words_dimension(testing_time)
 
-        print("INPUT DATA: ", test_pca[:10])
+        word_embeddings_pca, tags = get_reduced_words_dimension(testing_time)
+
+        print("Shape word_embeddings_pca:", word_embeddings_pca.shape)
+        print("Shape tags:", tags.shape)
+
+        test_pca = np.dstack((word_embeddings_pca, tags))
 
         print('Features for model constructed.. now running model')
 
