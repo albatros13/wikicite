@@ -7,7 +7,6 @@ from features.filter_content import filter_content
 from features.get_selected_features import get_selected_features
 from get_book_journal_features import get_book_journal_features
 from get_newspaper_citations import get_newspaper_citations
-from predict_citations import predict_citations
 from pyspark import SparkContext, SQLContext
 import os
 import sys
@@ -34,44 +33,54 @@ sc = SparkContext()
 sql_context = SQLContext(sc)
 print("Pyspark started...")
 
-ext = "_xh"
+ext = "xh_"
 INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
 
 # ext = "_en"
 # INPUT_DATA = PROJECT_HOME + 'data/dumps/enwiki-20221201-pages-articles-multistream1.xml-p1p41242.bz2'
 
-CITATIONS = PROJECT_HOME + 'data/content/citations' + ext + '.parquet'
-CITATIONS_CONTENT = PROJECT_HOME + 'data/content/citations_content' + ext + '.parquet'
+# ext = "_ro"
+# INPUT_DATA = PROJECT_HOME + 'data/dumps/rowikinews-20230101-pages-articles-multistream.xml.bz2'
 
-CITATIONS_SEPARATED = PROJECT_HOME + 'data/content/citations_separated' + ext + '.parquet'
-CITATIONS_IDS = PROJECT_HOME + 'data/content/citations_ids' + ext + '.parquet'
+# ext = "_ar"
+# INPUT_DATA = PROJECT_HOME + 'data/dumps/arwiki-20230101-pages-articles-multistream4.xml-p3982316p4045107.bz2'
 
-BASE_FEATURES = PROJECT_HOME + 'data/features/base_features_complete' + ext + '.parquet'
-CITATIONS_FEATURES = PROJECT_HOME + 'data/features/citations_features' + ext + '.parquet'
+# get_data
+CITATIONS = PROJECT_HOME + 'data/content/{}citations.parquet'.format(ext)
+CITATIONS_CONTENT = PROJECT_HOME + 'data/content/{}citations_content.parquet'.format(ext)
 
-BOOK_JOURNAL_CITATIONS = PROJECT_HOME + 'data/features/book_journal_citations' + ext + '.parquet'
-BOOK_JOURNAL_TEST = PROJECT_HOME + 'data/features/book_journal_test' + ext + '.parquet'
+# extract_nlp_features
+BASE_FEATURES = PROJECT_HOME + 'data/features/{}base_features_complete.parquet'.format(ext)
 
-NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/newspaper_citations' + ext + '.parquet'
-NEWSPAPER_FEATURES = PROJECT_HOME + 'data/features/newspaper_citation_features' + ext + '.parquet'
+# get_generic_tmpl
+CITATIONS_SEPARATED = PROJECT_HOME + 'data/content/{}citations_separated.parquet'.format(ext)
+
+# get_dataset_features
+CITATIONS_FEATURES = PROJECT_HOME + 'data/features/{}citations_features.parquet'.format(ext)
+
+# label books and journals
+BOOK_JOURNAL_CITATIONS = PROJECT_HOME + 'data/features/{}book_journal_citations.parquet'.format(ext)
+
+# label newspapers (web?)
+NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/{}newspaper_citations.parquet'.format(ext)
+NEWSPAPER_FEATURES = PROJECT_HOME + 'data/features/{}newspaper_citation_features.parquet'.format(ext)
+
+# Optional
+BOOK_JOURNAL_TEST = PROJECT_HOME + 'data/features/{}book_journal_test.parquet'.format(ext)
+CITATIONS_IDS = PROJECT_HOME + 'data/content/{}citations_ids.parquet'.format(ext)
 
 # Extract data
+
 # get_data(sql_context, INPUT_DATA, CITATIONS, CITATIONS_CONTENT, 50000)
-# extract_nlp_features(sql_context, CITATIONS_CONTENT, BASE_FEATURES)
-# get_generic_tmpl(sql_context, CITATIONS, CITATIONS_SEPARATED)
+extract_nlp_features(sql_context, CITATIONS_CONTENT, BASE_FEATURES)
+get_generic_tmpl(sql_context, CITATIONS, CITATIONS_SEPARATED)
+get_dataset_features(sql_context, BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
 
-# get_dataset_features(sql_context, BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
+get_book_journal_features(CITATIONS_FEATURES, BOOK_JOURNAL_CITATIONS, BOOK_JOURNAL_TEST)
 
-# get_book_journal_features(CITATIONS_FEATURES, BOOK_JOURNAL_CITATIONS, BOOK_JOURNAL_TEST)
-# get_newspaper_citations(sql_context, CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
-# get_selected_features(sql_context, BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
+get_newspaper_citations(sql_context, CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
+get_selected_features(sql_context, BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
 
-# Train ML models before calling prediction!
-
-# predict_citations(PROJECT_HOME, ext)
-
-# Extra
-
-# Citations with identifiers for sanity check
+# Optional
 # only_with_ids(sql_context, CITATIONS_SEPARATED, CITATIONS_IDS)
 

@@ -18,14 +18,15 @@ warnings.filterwarnings("ignore")
 sc = SparkContext()
 sql_context = SQLContext(sc)
 
-ext = "_xh"
-# ext = "_en"
+# ext = "xh_"
+ext = "en_"
+
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 TOP_300_TEMPLATES = PROJECT_HOME + 'data/top300_templates.csv'
 
-CITATIONS_SEPARATED = PROJECT_HOME + 'data/content/citations_separated{}.parquet'.format(ext)
-CITATIONS_IDS = PROJECT_HOME + 'data/content/citations_ids{}.parquet'.format(ext)
-CITATIONS_WITH_IDS = PROJECT_HOME + 'data/content/citations_with_ids{}.csv'.format(ext)
+CITATIONS_SEPARATED = PROJECT_HOME + 'data/content/{}citations_separated.parquet'.format(ext)
+CITATIONS_IDS = PROJECT_HOME + 'data/content/{}citations_ids.parquet'.format(ext)
+CITATIONS_WITH_IDS = PROJECT_HOME + 'data/content/{}citations_with_ids.csv'.format(ext)
 
 all_citations = sql_context.read.parquet(CITATIONS_SEPARATED)
 citation_count = all_citations.groupby('type_of_citation').count().toPandas()

@@ -29,17 +29,17 @@ def update_ids(x):
 def predict_citations(PROJECT_HOME, ext):
     print("Step FINAL : Predicting citations...")
 
-    FASTTEXT_MODEL = '../data/model/wiki_fasttext{}.txt'.format(ext)
-    CITATIONS_FEATURES = PROJECT_HOME + 'data/features/citations_features{}.parquet'.format(ext)
+    FASTTEXT_MODEL = '../data/model/{}wiki_fasttext.txt'.format(ext)
+    CITATIONS_FEATURES = PROJECT_HOME + 'data/features/{}citations_features.parquet'.format(ext)
 
-    NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/newspaper_citation_features{}.parquet'.format(ext)
-    LARGEST_SECTIONS = PROJECT_HOME + 'data/features/largest_sections{}.csv'.format(ext)
-    TAG_COUNT = PROJECT_HOME + '/data/features/tag_counts{}.csv'.format(ext)
-    CHAR_COUNT = PROJECT_HOME + '/data/features/char_counts{}.csv'.format(ext)
+    NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/{}newspaper_citation_features.parquet'.format(ext)
+    LARGEST_SECTIONS = PROJECT_HOME + 'data/features/{}largest_sections.csv'.format(ext)
+    TAG_COUNT = PROJECT_HOME + '/data/features/{}tag_counts.csv'.format(ext)
+    CHAR_COUNT = PROJECT_HOME + '/data/features/{}char_counts.csv'.format(ext)
 
-    MODEL_EMBEDDEDING = '../data/model/embedding_model{}.h5'.format(ext)
-    RESULT_FILE = '../data/model/result' + ext + '_{}.csv'
-    MODEL_CITATION_EPOCHS_H5 = '../data/model/citation_model_epochs' + ext + '_{}.h5'
+    MODEL_EMBEDDEDING = '../data/model/{}embedding_model.h5'.format(ext)
+    RESULT_FILE = '../data/model/' + ext + 'result_{}.csv'
+    MODEL_CITATION_EPOCHS_H5 = '../data/model/' + ext + 'citation_model_epochs_{}.h5'
 
     # Get the top 150 sections which we got from training the 2.7 million citations
     largest_sections = pd.read_csv(LARGEST_SECTIONS, header=None)

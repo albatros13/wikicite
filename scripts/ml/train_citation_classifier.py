@@ -27,34 +27,29 @@ from sklearn.metrics.pairwise import cosine_similarity
 from keras.models import load_model
 from keras.callbacks import ReduceLROnPlateau
 
-ext = "_xh"
+ext = "xh_"
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 
 
-BOOK_JOURNAL_CITATIONS = PROJECT_HOME + 'data/features/book_journal_citations' + ext + '.parquet'
-NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/newspaper_citation_features'+ext+'.parquet'
+BOOK_JOURNAL_CITATIONS = PROJECT_HOME + 'data/features/{}book_journal_citations.parquet'.format(ext)
+NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/{}newspaper_citation_features.parquet'.format(ext)
 
-TAG_COUNT = PROJECT_HOME + 'data/features/tag_counts'+ext+'.csv'
-CHAR_COUNT = PROJECT_HOME + 'data/features/char_counts'+ext+'.csv'
+TAG_COUNT = PROJECT_HOME + 'data/features/{}tag_counts.csv'.format(ext)
+CHAR_COUNT = PROJECT_HOME + 'data/features/{}char_counts.csv'.format(ext)
 
-FASTTEXT_MODEL = '../../data/model/wiki_fasttext{}.txt'.format(ext)
-MODEL_EMBEDDING = '../../data/model/embedding_model' + ext + '.h5'
-MODEL_CITATION_LOSS = '../../data/model/citation_model_loss' + ext + '_{}.json'
-MODEL_CITATION_RESULT = '../../data/model/citation_model_result' + ext + '_{}.json'
-MODEL_CITATION_EPOCHS_H5 = '../../data/model/citation_model_epochs' + ext + '_{}.h5'
-MODEL_CITATION_EPOCHS_JSON = '../../data/model/citation_model_epochs'+ext+'_{}.json'
+FASTTEXT_MODEL = '../../data/model/{}wiki_fasttext.txt'.format(ext)
+EMBEDDING_MODEL = '../../data/model/{}embedding_model.h5'.format(ext)
+MODEL_CITATION_LOSS = '../../data/model/'+ext+'citation_model_loss_{}.json'
+MODEL_CITATION_RESULT = '../../data/model/'+ext+'citation_model_result_{}.json'
+MODEL_CITATION_EPOCHS_H5 = '../../data/model/'+ext+'citation_model_epochs_{}.h5'
+MODEL_CITATION_EPOCHS_JSON = '../../data/model/'+ext+'citation_model_epochs_{}.json'
 
 gc.collect()
 warnings.filterwarnings("ignore")
 tqdm.pandas()
 keras.backend.backend()
 
-# local_device_protos = device_lib.list_local_devices()
-# print([x.name for x in local_device_protos if x.device_type == 'GPU'])
 np.random.seed(0)
-
-# from pyspark.sql import SparkSession
-# spark = SparkSession.builder.appName("wiki qss").getOrCreate()
 
 # Get auxiliary features and divide them into labels
 # 1. `ref_index`
@@ -66,6 +61,7 @@ np.random.seed(0)
 
 def prepare_labelled_dataset():
     print("PREPARING LABELLED DATASET...")
+
     # BOOKS AND JOURNALS
 
     book_journal_features = pd.read_parquet(BOOK_JOURNAL_CITATIONS, engine='pyarrow')
@@ -120,9 +116,6 @@ def prepare_labelled_dataset():
     dataset_with_features[dataset_with_features['actual_label'] == 'book'].head(1)
     dataset_with_features[dataset_with_features['actual_label'] == 'journal'].head(1)
 
-    # Convert citations' text to UTF-8
-    # NK We dont need that in Python 3
-    # dataset_with_features['citations'] = dataset_with_features['citations'].progress_apply(lambda x: x.encode("utf-8"))
     # print("Dataset labels:", dataset_with_features['actual_label'].value_counts())
 
     # Clearing up memory
@@ -153,7 +146,7 @@ def prepare_auxiliary_features():
     section_counts = pd.Series(Counter(chain.from_iterable(x for x in auxiliary_features.sections)))
     largest_sections = section_counts.nlargest(150)
 
-    LARGEST_SECTIONS = PROJECT_HOME + 'data/features/largest_sections' + ext + '.csv'
+    LARGEST_SECTIONS = PROJECT_HOME + 'data/features/{}largest_sections.csv'.format(ext)
     largest_sections.to_csv(LARGEST_SECTIONS, header=None)
 
     # Change section to `OTHERS` if occurrence of the section is not in the 150 largest sections
@@ -640,14 +633,14 @@ def train_model(data):
     accuracy_score(testing_labels, predicted_class)
 
     # Save the model so that we can retrieve it later
-    model.save(MODEL_EMBEDDING)
+    model.save(EMBEDDING_MODEL)
     return model
 
 
 # MAIN
 dataset_with_features = prepare_labelled_dataset()
 # Save dataset - as an intermediate file if you want to use it somewhere else
-DATASET_WITH_FEATURES = PROJECT_HOME + 'data/features/dataset_with_features'+ext+'.csv'
+DATASET_WITH_FEATURES = PROJECT_HOME + 'data/features/{}dataset_with_features.csv'.format(ext)
 dataset_with_features.to_csv(DATASET_WITH_FEATURES, index=False)
 
 auxiliary_features = prepare_auxiliary_features()
@@ -656,8 +649,8 @@ citation_text_features = prepare_citation_text_features()
 
 data = prepare_data(citation_text_features)
 
-# model = train_model(data)
-model = load_model(MODEL_EMBEDDING)
+model = train_model(data)
+# model = load_model(EMBEDDING_MODEL)
 
 citation_text_features = prepare_citation_embedding(citation_text_features, model)
 # tsne_embedding_plot(citation_text_and_embeddings)

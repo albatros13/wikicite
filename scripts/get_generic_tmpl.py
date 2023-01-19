@@ -6,7 +6,7 @@ import re
 from pyspark.sql.types import *
 
 
-def get_generic_tmpl(sql_context, file_in, file_out):
+def get_generic_tmpl(sql_context, file_in, file_out, lang='en'):
     print("Step 4: Converting citations to generic template...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
@@ -31,9 +31,9 @@ def get_generic_tmpl(sql_context, file_in, file_out):
                 my_string = my_string.replace(br, '')
         return not my_string
 
-    # NK Note: in some files empty authors are []
-    def preprocess_authors(authors):
-        return ", ".join([str(a) for a in authors])
+    def list_to_str(items):
+        return ", ".join([str(a) for a in items])
+        # return str(items)
 
     def get_generic_template(citation):
         """
@@ -47,14 +47,16 @@ def get_generic_tmpl(sql_context, file_in, file_out):
             # Convert the str into a mwparser object
             wikicode = mwparserfromhell.parse(citation)
             template = wikicode.filter_templates()[0]
-            parsed_result = parse_citation_template(template, 'en')
+            parsed_result = parse_citation_template(template, lang)
         except Exception as e:
             print("Failed to parse citation template: ", e)
             return not_parsable
 
         # NK This is a fix for potentially different field types: array vs string
         if "Authors" in parsed_result:
-            parsed_result["Authors"] = preprocess_authors(parsed_result["Authors"])
+            parsed_result["Authors"] = list_to_str(parsed_result["Authors"])
+        if "ID_list" in parsed_result:
+            parsed_result["ID_list"] = str(parsed_result["ID_list"])
 
         return parsed_result
 

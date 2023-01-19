@@ -17,8 +17,8 @@ def get_newspaper_citations(sql_context, file_in, file_out):
     citations_separated = citations_separated.where(col("URL").isNotNull())
 
     def get_top_domain(citation_url):
-        ext = tldextract.extract(citation_url)
-        return ext.domain
+        url_ext = tldextract.extract(citation_url)
+        return url_ext.domain
 
     top_domain_udf = udf(get_top_domain)
     citations_separated = citations_separated.withColumn('tld', top_domain_udf('URL'))

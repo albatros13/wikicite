@@ -170,6 +170,6 @@ def parse_citation_template(template, lang='en'):
     # name = unicode(template.name)
     name = template.name
     if not is_citation_template_name(name, lang):
-        print("Not a citation template:", name)
+        # print("Not a citation template:", name)
         return {}
     return parse_citation_dict(params_to_dict(template.params), template_name=name)

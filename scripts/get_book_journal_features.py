@@ -1,6 +1,6 @@
 import re
 import pandas as pd
-
+import re
 
 def get_book_journal_features(file_in, file_out, file_out_test=None):
     print("Step 6: Getting book and journal citations...")
@@ -8,7 +8,9 @@ def get_book_journal_features(file_in, file_out, file_out_test=None):
     citations_features = pd.read_parquet(file_in, engine='pyarrow')
 
     print('The columns in the citations features are: {}'.format(citations_features.columns))
-    citations_features['id_list_test'] = citations_features['ID_list']
+
+    # citations_features['ID_list'] = citations_features['ID_list'].apply(lambda x: str(x))
+    citations_features['id_list_test'] = citations_features['ID_list'].apply(lambda x: str(x))
 
     # NK TODO Check that the selected citations do not contain rows with empty ID_list
     citation_with_ids = citations_features[citations_features['ID_list'].notnull()]
@@ -17,8 +19,15 @@ def get_book_journal_features(file_in, file_out, file_out_test=None):
 
     # Formulate a structure for the ID_List in which we can do something meaningful
 
-    citation_with_ids['ID_list'] = citation_with_ids['ID_list'].progress_apply(
-        lambda x: list(item.split('=') for item in x.replace('{','').replace('}','').replace(' ', '').split(',')))
+    print("ID_list:", citation_with_ids['ID_list'].head(5))
+
+    parser = lambda x: list(re.split('=|:', item)
+                            for item in x.replace('{','').replace('}','').replace(' ', '').replace("'","").split(','))
+
+    try:
+        citation_with_ids['ID_list'] = citation_with_ids['ID_list'].apply(parser)
+    except Exception as e:
+        print("Failed to parse ID_list with parser: ", e)
 
     # Get the kinds of ids associated with each tuple
     kinds_of_ids = set()
@@ -27,7 +36,7 @@ def get_book_journal_features(file_in, file_out, file_out_test=None):
         for item in x:
             kinds_of_ids.add(item[0])
 
-    _ = citation_with_ids['ID_list'].progress_apply(lambda x: update_ids(x))
+    _ = citation_with_ids['ID_list'].apply(lambda x: update_ids(x))
 
     kinds_of_ids.discard('')
     # TODO can we write None?
@@ -47,15 +56,15 @@ def get_book_journal_features(file_in, file_out, file_out_test=None):
         for item in x['ID_list']:
             citation_with_ids.at[x.name, item[0]] = item[1] if len(item) >= 2 else None
 
-    _ = citation_with_ids.progress_apply(lambda x: set_citation_val(x), axis=1)
+    _ = citation_with_ids.apply(lambda x: set_citation_val(x), axis=1)
 
     # Setting the labels
     citation_with_ids['actual_label'] = 'rest'
 
-    is_doi = ('DOI' in citation_with_ids) & ~pd.isna(citation_with_ids['DOI'])
-    is_pmc = ('PMC' in citation_with_ids) & ~pd.isna(citation_with_ids['PMC'])
-    is_pmid = ('PMID' in citation_with_ids) & ~pd.isna(citation_with_ids['PMID'])
-    is_isbn = ('ISBN'in citation_with_ids) & ~pd.isna(citation_with_ids['ISBN'])
+    is_doi = ~pd.isna(citation_with_ids['DOI'])
+    is_pmc = ~pd.isna(citation_with_ids['PMC'])
+    is_pmid = ~pd.isna(citation_with_ids['PMID'])
+    is_isbn = ~pd.isna(citation_with_ids['ISBN'])
 
     citation_with_ids.loc[is_pmc, ['actual_label']] = 'journal'
     citation_with_ids.loc[is_pmid, ['actual_label']] = 'journal'
@@ -103,10 +112,9 @@ def get_book_journal_features(file_in, file_out, file_out_test=None):
             lambda x: re.sub(label+'\s{0,10}=\s{0,10}([^|]+)', label+' = ', x))
 
     citation_with_ids['actual_label'].value_counts()
-    citation_with_ids['actual_prob'] = citation_with_ids['actual_label']\
-        .progress_apply(lambda x: 0.45 if x == 'book' else 0.55)
+    citation_with_ids['actual_prob'] = citation_with_ids['actual_label'].apply(lambda x: 0.45 if x == 'book' else 0.55)
 
-    n = min(int(len(citation_with_ids) / 2), 1000000)
+    n = min(len(citation_with_ids), 1000000)
     book_journal_features = citation_with_ids.sample(n=n, weights='actual_prob')
 
     print(book_journal_features['actual_label'].value_counts())
