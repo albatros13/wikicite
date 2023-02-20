@@ -8,7 +8,7 @@ import re
 import mwparserfromhell
 from nltk import pos_tag
 from pyspark.sql.functions import explode
-from pyspark.sql.types import *
+from pyspark.sql.types import Row
 
 
 def extract_nlp_features(sql_context, file_in, file_out):

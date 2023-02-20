@@ -237,7 +237,7 @@ def prepare_citation_tag_features():
     transformed_neighboring_tags = pd.DataFrame(transformed_neighboring_tags.toarray(), columns=cv.get_feature_names())
 
     citation_tag_features.head()
-    print("Transformed neighbouring tags dimensions: ", transformed_neighboring_tags.shape)
+    print("Transformed neighboring tags dimensions: ", transformed_neighboring_tags.shape)
     print("Citation tag features dimensions: ", citation_tag_features.shape)
 
     citation_tag_features = citation_tag_features.reset_index(drop=True)

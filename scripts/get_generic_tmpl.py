@@ -1,9 +1,9 @@
 import mwparserfromhell
 from const import CITATION_TEMPLATES
 from wikiciteparser.parser import parse_citation_template
-from pyspark.sql.functions import expr, udf, col, lit
+from pyspark.sql.functions import expr, col
 import re
-from pyspark.sql.types import *
+from pyspark.sql.types import Row
 
 
 def get_generic_tmpl(sql_context, file_in, file_out, lang='en'):
@@ -57,6 +57,8 @@ def get_generic_tmpl(sql_context, file_in, file_out, lang='en'):
             parsed_result["Authors"] = list_to_str(parsed_result["Authors"])
         if "ID_list" in parsed_result:
             parsed_result["ID_list"] = str(parsed_result["ID_list"])
+        if "PublisherName" in parsed_result:
+            parsed_result["PublisherName"] = parsed_result["PublisherName"].replace("[[",'').replace("]]",'')
 
         return parsed_result
 

@@ -1,5 +1,5 @@
 from pyspark.sql.functions import udf, col
-from pyspark.sql.types import *
+from pyspark.sql.types import StringType
 
 
 def get_selected_features(sql_context, file_in1, file_in2, file_out):
@@ -22,7 +22,7 @@ def get_selected_features(sql_context, file_in1, file_in2, file_out):
     def array_to_string(my_list):
        return '[' + ','.join([str(elem) for elem in my_list]) + ']'
 
-    array_to_string_udf = udf(array_to_string,StringType())
+    array_to_string_udf = udf(array_to_string, StringType())
 
     results = features.join(selected_features, features['retrieved_citation'] == selected_features['citations'])
     results = results.withColumn('neighboring_words', array_to_string_udf(results["neighboring_words"]))

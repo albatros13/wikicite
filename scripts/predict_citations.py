@@ -7,10 +7,11 @@ from tqdm import tqdm
 from itertools import chain
 from keras.models import load_model
 from collections import Counter
-from gensim.models import FastText
+from gensim.models import FastText, Word2Vec
 from sklearn.decomposition import PCA
 from keras_preprocessing.sequence import pad_sequences
 from sklearn.feature_extraction.text import CountVectorizer
+import pickle
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -30,6 +31,8 @@ def predict_citations(PROJECT_HOME, ext):
     print("Step FINAL : Predicting citations...")
 
     FASTTEXT_MODEL = '../data/model/{}wiki_fasttext.txt'.format(ext)
+    FASTTEXT_MODEL = '../data/model/en_wiki_fasttext_300.txt'
+
     CITATIONS_FEATURES = PROJECT_HOME + 'data/features/{}citations_features.parquet'.format(ext)
 
     NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/{}newspaper_citation_features.parquet'.format(ext)
@@ -49,7 +52,13 @@ def predict_citations(PROJECT_HOME, ext):
     original_tag_counts.rename({0: 'tag', 1: 'count'}, axis=1, inplace=True)
 
     # Load the pretrained embedding model on wikipedia
-    model_fasttext = FastText.load(FASTTEXT_MODEL)
+    # model_fasttext = FastText.load(FASTTEXT_MODEL)
+    # model_fasttext = Word2Vec.load(FASTTEXT_MODEL)
+    model_fasttext = Word2Vec.load('../data/model/enwiki_20180420_win10_100d.pkl.bz2')
+
+    # with open('.....', 'rb') as f:
+    #     data = pickle.load(f)
+
     model_embedding = load_model(MODEL_EMBEDDEDING)
     model = load_model(MODEL_CITATION_EPOCHS_H5.format(30))
 
@@ -178,7 +187,7 @@ def predict_citations(PROJECT_HOME, ext):
         transformed_neighboring_tags = cv.fit_transform(citation_tag_features['neighboring_tags'])
         transformed_neighboring_tags = pd.DataFrame(transformed_neighboring_tags.toarray(), columns=cv.get_feature_names())
 
-        print("Transformed neighbouring tags dimensions: ", transformed_neighboring_tags.shape)
+        print("Transformed neighboring tags dimensions: ", transformed_neighboring_tags.shape)
         print("Citation tag features dimensions: ", citation_tag_features.shape)
 
         citation_tag_features = citation_tag_features.reset_index(drop=True)

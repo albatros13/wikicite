@@ -1,129 +1,135 @@
 import re
-import pandas as pd
-import re
+from pyspark.sql.functions import col, explode, udf, lit
+from pyspark.sql.types import BooleanType, ArrayType, StringType
 
-def get_book_journal_features(file_in, file_out, file_out_test=None):
-    print("Step 6: Getting book and journal citations...")
 
-    citations_features = pd.read_parquet(file_in, engine='pyarrow')
+def filter_with_ids(sql_context, file_in, file_out):
+    print("Step 6a: Selecting citations with identifiers...")
 
+    sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
+    citations_features = sql_context.read.parquet(file_in)
+
+    print("Length full:", citations_features.count())
     print('The columns in the citations features are: {}'.format(citations_features.columns))
 
-    # citations_features['ID_list'] = citations_features['ID_list'].apply(lambda x: str(x))
-    citations_features['id_list_test'] = citations_features['ID_list'].apply(lambda x: str(x))
+    citation_with_ids = citations_features.where(col("ID_list") != '')
+    citation_with_ids = citation_with_ids.dropDuplicates()
+    print("Length filtered:", citation_with_ids.count())
+    citation_with_ids.write.mode('overwrite').parquet(file_out)
 
-    # NK TODO Check that the selected citations do not contain rows with empty ID_list
-    citation_with_ids = citations_features[citations_features['ID_list'].notnull()]
 
-    print('Total citations with NOT-NULL ID LIST: {}'.format(len(citation_with_ids)))
+# Rewritten to perform necessary manipulations on Spark as opposed to Pandas dataframe as in the original script
+def get_book_journal_features(sql_context, file_in, file_out):
+    print("Step 6: Getting book and journal citations...")
 
-    # Formulate a structure for the ID_List in which we can do something meaningful
-
-    print("ID_list:", citation_with_ids['ID_list'].head(5))
+    sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
+    citation_with_ids = sql_context.read.parquet(file_in)
+    citation_with_ids = citation_with_ids.limit(50000)
+    # df1 = citation_with_ids.limit(1000)
+    # df2 = citation_with_ids.limit(2000)
+    # citation_with_ids = df2.subtract(df1)
 
     parser = lambda x: list(re.split('=|:', item)
-                            for item in x.replace('{','').replace('}','').replace(' ', '').replace("'","").split(','))
-
-    try:
-        citation_with_ids['ID_list'] = citation_with_ids['ID_list'].apply(parser)
-    except Exception as e:
-        print("Failed to parse ID_list with parser: ", e)
-
-    # Get the kinds of ids associated with each tuple
-    kinds_of_ids = set()
+                            for item in
+                            x.replace('{', '').replace('}', '').replace(' ', '').replace("'", "").split(','))
+    udf_parser = udf(parser)
+    citation_with_ids = citation_with_ids.withColumn("ID_list", udf_parser(citation_with_ids["ID_list"]))
 
     def update_ids(x):
+        ids = []
         for item in x:
-            kinds_of_ids.add(item[0])
+            ids.append(item[0])
+        return ids
 
-    _ = citation_with_ids['ID_list'].apply(lambda x: update_ids(x))
+    udf_update_ids = udf(update_ids, ArrayType(StringType()))
+    citation_with_ids = citation_with_ids.withColumn('kinds_of_ids', udf_update_ids(citation_with_ids['ID_list']))
 
-    kinds_of_ids.discard('')
-    # TODO can we write None?
-    # Add the columns with NoneType in the previous DF
-    for id_ in kinds_of_ids:
-        citation_with_ids[id_] = None
-
-    print('Total kind of Citation IDs: {}'.format(len(kinds_of_ids)))
+    tmp = citation_with_ids.select("kinds_of_ids").distinct()
+    tmp = tmp.withColumn("kinds_of_ids", explode("kinds_of_ids"))
+    tmp = tmp.dropDuplicates(["kinds_of_ids"])
+    kinds_of_ids = tmp.rdd.map(lambda x: x["kinds_of_ids"]).collect()
     print('Total kind of Citation IDs: {}'.format(kinds_of_ids))
 
-    # Example:
-    # {'LCCN', 'OCLC', 'OL', 'OSTI', 'MR', 'USENETID', 'ASIN', 'ZBL', 'ISSN', 'BIBCODE', 'PMID', 'DOI',
-    # 'ISBN', 'PMC', 'SSRN', 'JSTOR', 'ARXIV'}
+    # kinds_of_ids = ['PMID', 'ARXIV', 'DOI', 'OL', 'PMC', 'LCCN', 'OCLC', 'ASIN', 'OSTI', 'MR', 'ZBL', 'SSRN', 'JSTOR',
+    # 'BIBCODE', 'ISBN', 'USENETID', 'ISSN']
 
-    # Set the value of identifiers for each column, for e.g. DOI, ISBN etc.
-    def set_citation_val(x):
-        for item in x['ID_list']:
-            citation_with_ids.at[x.name, item[0]] = item[1] if len(item) >= 2 else None
+    for id_ in kinds_of_ids:
+        citation_with_ids = citation_with_ids.withColumn(id_, lit(None))
 
-    _ = citation_with_ids.apply(lambda x: set_citation_val(x), axis=1)
+    citation_with_ids = citation_with_ids.withColumn('actual_label', lit("rest"))
 
-    # Setting the labels
-    citation_with_ids['actual_label'] = 'rest'
+    for id_ in kinds_of_ids:
+        def get_citation_val(x):
+            for item in x:
+                if item[0] == id_ and len(item) > 1:
+                    return item[1]
+            return None
+        udf_get_citation_val = udf(get_citation_val)
+        citation_with_ids = citation_with_ids.withColumn(id_, udf_get_citation_val("ID_list"))
 
-    is_doi = ~pd.isna(citation_with_ids['DOI'])
-    is_pmc = ~pd.isna(citation_with_ids['PMC'])
-    is_pmid = ~pd.isna(citation_with_ids['PMID'])
-    is_isbn = ~pd.isna(citation_with_ids['ISBN'])
+    def get_label(doi, pmid, pmc, isbn, type):
+        category = 'rest'
+        if pmid or pmc:
+            category = 'journal'
+        if doi and not pmc and not pmid and not isbn:
+            category = 'journal'
+        if isbn and not pmc and not pmid and not doi:
+            category = 'book'
+        if isbn and doi:
+            if type in ['cite journal', 'cite conference']:
+                category = 'journal'
+            elif type in ['cite book', 'cite encyclopedia']:
+                category = 'book'
+        return category
 
-    citation_with_ids.loc[is_pmc, ['actual_label']] = 'journal'
-    citation_with_ids.loc[is_pmid, ['actual_label']] = 'journal'
+    udf_get_label = udf(get_label)
+    citation_with_ids = citation_with_ids.withColumn('actual_label', udf_get_label('DOI', 'PMID', 'PMC', 'ISBN', 'type_of_citation'))
+    citation_with_ids = citation_with_ids.filter(col('actual_label').isin(['book', 'journal']))
 
-    only_doi = (is_doi & ~is_pmc & ~is_pmid & ~is_isbn)
-    citation_with_ids.loc[only_doi, ['actual_label']] = 'journal'
+    for id_ in kinds_of_ids:
+        citation_with_ids = citation_with_ids.drop(id_)
+    citation_with_ids = citation_with_ids.drop("ID_list", "kinds_of_ids")
 
-    only_isbn = (is_isbn & ~is_pmc & ~is_pmid & ~is_doi)
-    citation_with_ids.loc[only_isbn, ['actual_label']] = 'book'
+    def array_to_string(my_list):
+        return '[' + ','.join([str(elem) for elem in my_list]) + ']'
 
-    doi_and_isbn = (is_doi & ~is_pmc & ~is_pmid & is_isbn)
+    array_to_string_udf = udf(array_to_string)
 
-    both_book_and_doi_journal = (doi_and_isbn
-                                & citation_with_ids['type_of_citation'].isin(['cite journal', 'cite conference']))
-    citation_with_ids.loc[both_book_and_doi_journal, ['actual_label']] = 'journal'
+    # NK Without this spark at gcloud fails to write the result on disk
+    citation_with_ids = citation_with_ids.withColumn('neighboring_tags', array_to_string_udf("neighboring_tags"))
+    citation_with_ids = citation_with_ids.withColumn('neighboring_words', array_to_string_udf("neighboring_words"))
 
-    both_book_and_doi_book = (doi_and_isbn
-                              & citation_with_ids['type_of_citation'].isin(['cite book', 'cite encyclopedia']))
-    citation_with_ids.loc[both_book_and_doi_book, ['actual_label']] = 'book'
 
-    # Made the dataset which contains citations book and journal labeled
-    citation_with_ids = citation_with_ids[citation_with_ids['actual_label'].isin(['book', 'journal'])]
-
-    # print("Content of citations_with_ids:")
-    # print(citation_with_ids.head())
-
-    citation_with_ids = citation_with_ids[[
+    citation_with_ids = citation_with_ids.select(
       'type_of_citation', 'citations', 'id', 'ref_index', 'sections',
-      'total_words', 'neighboring_tags', 'actual_label', 'neighboring_words',
-      'id_list_test'
-    ]]
-    print('The total number of citations_with_ids: {}'.format(citation_with_ids.shape))
+      'total_words', 'neighboring_tags', 'neighboring_words', 'actual_label')
 
-    citation_with_ids = citation_with_ids.set_index(['id', 'citations'])
-    citation_with_ids = citation_with_ids[~citation_with_ids.index.duplicated(keep='first')]
-    citation_with_ids = citation_with_ids.reset_index()
-
-    print('IDs for book and journal which fulfil the criteria: {}'.format(citation_with_ids.shape[0]))
-
-    # Removing the biases
     labels = ['doi', 'isbn', 'pmc', 'pmid', 'url', 'work', 'newspaper', 'website']
     for label in labels:
-        # citation_with_ids['citations'] = citation_with_ids['citations'].progress_apply(
-        citation_with_ids['citations'] = citation_with_ids['citations'].apply(
-            lambda x: re.sub(label+'\s{0,10}=\s{0,10}([^|]+)', label+' = ', x))
+        def remove_bias(x):
+            return re.sub(label + '\s{0,10}=\s{0,10}([^|]+)', label + ' = ', x)
+        udf_remove_bias = udf(remove_bias)
+        citation_with_ids = citation_with_ids.withColumn('citations', udf_remove_bias('citations'))
 
-    citation_with_ids['actual_label'].value_counts()
-    citation_with_ids['actual_prob'] = citation_with_ids['actual_label'].apply(lambda x: 0.45 if x == 'book' else 0.55)
+    citation_with_ids = citation_with_ids.dropDuplicates(['id', 'citations'])
 
-    n = min(len(citation_with_ids), 1000000)
-    book_journal_features = citation_with_ids.sample(n=n, weights='actual_prob')
+    # def mismatched(x, y):
+    #    return x != 'cite ' + y
 
-    print(book_journal_features['actual_label'].value_counts())
-    print(book_journal_features.columns)
+    # udf_mismatched = udf(mismatched, BooleanType())
+    # corrected = citation_with_ids.filter(udf_mismatched('type_of_citation', 'actual_label'))
+    # print('The number of relabelled citations: {}'.format(corrected.count()))
+    # 12 out of 190
 
-    if file_out_test:
-        test = book_journal_features[['citations', 'id_list_test', 'actual_label']]
-        test.to_parquet(file_out_test)
+    k = min(citation_with_ids.count(), 1000000)
+    n = k/citation_with_ids.count()
 
-    book_journal_features.drop('id_list_test', axis=1, inplace=True)
-    book_journal_features.to_parquet(file_out)
+    book_journal_features = citation_with_ids.sample(n)
+    print('The number of unique citations_with_ids: {}'.format(book_journal_features.count()))
+
+    book_journal_features = book_journal_features.limit()
+    book_journal_features.write.mode('overwrite').parquet(file_out)
+
+    # citation_with_ids.write.mode('overwrite').parquet(file_out)
+
 

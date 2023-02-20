@@ -62,4 +62,12 @@ class TestGetData(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    import sys
+    import nltk
+    import re
+
+    print("You are using Python {}.{}.".format(sys.version_info.major, sys.version_info.minor))
+    print('The nltk version is {}.'.format(nltk.__version__))
+    print('The re version is {}.'.format(re.__version__))
+
     unittest.main()

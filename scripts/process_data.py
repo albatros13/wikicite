@@ -3,9 +3,8 @@ from get_data import get_data
 from get_generic_tmpl import get_generic_tmpl, only_with_ids
 from features.extract_nlp_features import extract_nlp_features
 from features.get_dataset_features import get_dataset_features
-from features.filter_content import filter_content
 from features.get_selected_features import get_selected_features
-from get_book_journal_features import get_book_journal_features
+from get_book_journal_features import get_book_journal_features, filter_with_ids
 from get_newspaper_citations import get_newspaper_citations
 from pyspark import SparkContext, SQLContext
 import os
@@ -19,25 +18,23 @@ findspark.init()
 os.environ['PYSPARK_PYTHON'] = sys.executable
 os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
 
-
 # NK tries this with spark-3.3.1-bin-hadoop3 - it fails on save, hadoop3 issue on Windows?
 # os.environ["PYSPARK_SUBMIT_ARGS"] = "--packages com.databricks:spark-xml_2.12-0.16.0 pyspark-shell"
 # sc = SparkSession.builder.appName("WikiCite").config("spark.memory.offHeap.enabled","true")\
-#     .config("spark.memory.offHeap.size","10g") \
-#     .config("spark.jars", "PYSPARK_HOME/jars/spark-xml_2.12-0.9.0.jar") \
+#     .config("spark.memory.offHeap.size","10g").config("spark.jars", "PYSPARK_HOME/jars/spark-xml_2.12-0.9.0.jar") \
 #     .getOrCreate()
-#
+
 
 print("Starting pyspark...")
-sc = SparkContext()
+sc = SparkContext.getOrCreate()
 sql_context = SQLContext(sc)
 print("Pyspark started...")
 
-ext = "xh_"
-INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
+# ext = "xh_"
+# INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
 
-# ext = "_en"
-# INPUT_DATA = PROJECT_HOME + 'data/dumps/enwiki-20221201-pages-articles-multistream1.xml-p1p41242.bz2'
+ext = "en_"
+INPUT_DATA = PROJECT_HOME + 'data/dumps/enwiki-20221201-pages-articles-multistream1.xml-p1p41242.bz2'
 
 # ext = "_ro"
 # INPUT_DATA = PROJECT_HOME + 'data/dumps/rowikinews-20230101-pages-articles-multistream.xml.bz2'
@@ -57,6 +54,7 @@ CITATIONS_SEPARATED = PROJECT_HOME + 'data/content/{}citations_separated.parquet
 
 # get_dataset_features
 CITATIONS_FEATURES = PROJECT_HOME + 'data/features/{}citations_features.parquet'.format(ext)
+CITATIONS_FEATURES_IDS = PROJECT_HOME + 'data/features/{}citations_features_ids.parquet'.format(ext)
 
 # label books and journals
 BOOK_JOURNAL_CITATIONS = PROJECT_HOME + 'data/features/{}book_journal_citations.parquet'.format(ext)
@@ -66,20 +64,19 @@ NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/{}newspaper_citations.parque
 NEWSPAPER_FEATURES = PROJECT_HOME + 'data/features/{}newspaper_citation_features.parquet'.format(ext)
 
 # Optional
-BOOK_JOURNAL_TEST = PROJECT_HOME + 'data/features/{}book_journal_test.parquet'.format(ext)
 CITATIONS_IDS = PROJECT_HOME + 'data/content/{}citations_ids.parquet'.format(ext)
 
 # Extract data
 
 # get_data(sql_context, INPUT_DATA, CITATIONS, CITATIONS_CONTENT, 50000)
-extract_nlp_features(sql_context, CITATIONS_CONTENT, BASE_FEATURES)
-get_generic_tmpl(sql_context, CITATIONS, CITATIONS_SEPARATED)
-get_dataset_features(sql_context, BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
+# extract_nlp_features(sql_context, CITATIONS_CONTENT, BASE_FEATURES)
+# get_generic_tmpl(sql_context, CITATIONS, CITATIONS_SEPARATED)
+# get_dataset_features(sql_context, BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
+# filter_with_ids(sql_context, CITATIONS_FEATURES, CITATIONS_FEATURES_IDS)
+get_book_journal_features(sql_context, CITATIONS_FEATURES_IDS, BOOK_JOURNAL_CITATIONS)
 
-get_book_journal_features(CITATIONS_FEATURES, BOOK_JOURNAL_CITATIONS, BOOK_JOURNAL_TEST)
-
-get_newspaper_citations(sql_context, CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
-get_selected_features(sql_context, BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
+# get_newspaper_citations(sql_context, CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
+# get_selected_features(sql_context, BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
 
 # Optional
 # only_with_ids(sql_context, CITATIONS_SEPARATED, CITATIONS_IDS)
