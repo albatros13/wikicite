@@ -1,1 +1,0 @@
-PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'

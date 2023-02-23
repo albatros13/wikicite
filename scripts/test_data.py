@@ -1,7 +1,7 @@
-from local import PROJECT_HOME
 from get_test_data import get_test_data
 from pyspark import SparkContext, SQLContext
 
+PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 ext = "xh_"
 INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
 

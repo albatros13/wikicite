@@ -22,12 +22,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 
-from tensorflow.python.client import device_lib
-from sklearn.metrics.pairwise import cosine_similarity
-from keras.models import load_model
-from keras.callbacks import ReduceLROnPlateau
 
-ext = "xh_"
+ext = "en_"
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 
 
@@ -560,8 +556,6 @@ def generator_nn(features_aux, features_time, labels, batch_size):
         for i in range(batch_size):
             # choose random index in features
             index = np.random.choice(len(features_aux), 1)[0]
-            # print("INDEX", index)
-            # print(features_aux[index])
             batch_features_aux[i] = features_aux[index]
             batch_features_time[i] = features_time[index]
             batch_labels[i] = labels[index]
@@ -697,6 +691,7 @@ print("time_pca", time_pca.shape)
 # del column_mask_aux
 # gc.collect()
 
+
 def classification_model(input_length):
     """
     Model for classifying whether a citation is scientific or not.
@@ -785,10 +780,7 @@ def classify_citations():
 
     training_generator = generator_nn(aux_train, time_train, y_train, BATCH_SIZE)
 
-    # print("Len(x_train_indices):", len(x_train_indices))
-    # print("Classifier steps_per_epoch", )
     steps = len(x_train_indices)
-    # // BATCH_SIZE
 
     callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
     history_callback = model.fit_generator(
@@ -821,6 +813,6 @@ def classify_citations():
 
     print('\n\nDone with the prediction and saving model with epochs: {}\n'.format(EPOCHS))
 
+
 classify_citations()
 
-# NK TODO classify citations using just citation_text_features

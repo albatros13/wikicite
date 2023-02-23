@@ -7,11 +7,10 @@ from tqdm import tqdm
 from itertools import chain
 from keras.models import load_model
 from collections import Counter
-from gensim.models import FastText, Word2Vec
+from gensim.models import FastText
 from sklearn.decomposition import PCA
-from keras_preprocessing.sequence import pad_sequences
 from sklearn.feature_extraction.text import CountVectorizer
-import pickle
+
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -31,7 +30,6 @@ def predict_citations(PROJECT_HOME, ext):
     print("Step FINAL : Predicting citations...")
 
     FASTTEXT_MODEL = '../data/model/{}wiki_fasttext.txt'.format(ext)
-    FASTTEXT_MODEL = '../data/model/en_wiki_fasttext_300.txt'
 
     CITATIONS_FEATURES = PROJECT_HOME + 'data/features/{}citations_features.parquet'.format(ext)
 
@@ -52,12 +50,7 @@ def predict_citations(PROJECT_HOME, ext):
     original_tag_counts.rename({0: 'tag', 1: 'count'}, axis=1, inplace=True)
 
     # Load the pretrained embedding model on wikipedia
-    # model_fasttext = FastText.load(FASTTEXT_MODEL)
-    # model_fasttext = Word2Vec.load(FASTTEXT_MODEL)
-    model_fasttext = Word2Vec.load('../data/model/enwiki_20180420_win10_100d.pkl.bz2')
-
-    # with open('.....', 'rb') as f:
-    #     data = pickle.load(f)
+    model_fasttext = FastText.load(FASTTEXT_MODEL)
 
     model_embedding = load_model(MODEL_EMBEDDEDING)
     model = load_model(MODEL_CITATION_EPOCHS_H5.format(30))
@@ -65,7 +58,7 @@ def predict_citations(PROJECT_HOME, ext):
     print('Loaded files and intermediary files...')
 
     newspaper_data = pd.read_parquet(NEWSPAPER_CITATIONS, engine='pyarrow')
-    print('Loaded newspaper and entertainment datasets...')
+    print('Loaded newspaper datasets...')
 
     def needs_a_label_or_not(row):
         """
@@ -326,6 +319,7 @@ def predict_citations(PROJECT_HOME, ext):
 
         # Make a mask for auxiliary dataset to get all features except the one below
         column_mask_aux = ~auxiliary_features.columns.isin(['citations', 'neighboring_words'])
+        # NK TODO revise - fails locally due to memory constraints
         testing_auxiliary = auxiliary_features.loc[:, column_mask_aux].values.tolist()
         testing_auxiliary = [np.array(testing_auxiliary[i][0][0] + testing_auxiliary[i][1:]) for i in tqdm(range(len(testing_auxiliary)))]
 
@@ -365,3 +359,10 @@ def predict_citations(PROJECT_HOME, ext):
 
         resultant_examples.to_csv(RESULT_FILE.format(index__), index=False, encoding='utf-8')
         print('\nFile saved for part: {}\n\n'.format(index__))
+
+
+# PROJECT_HOME = "gs://wikicite-1/"
+PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
+ext = "en_"
+
+predict_citations(PROJECT_HOME, ext)

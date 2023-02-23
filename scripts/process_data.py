@@ -1,4 +1,3 @@
-from local import PROJECT_HOME
 from get_data import get_data
 from get_generic_tmpl import get_generic_tmpl, only_with_ids
 from features.extract_nlp_features import extract_nlp_features
@@ -18,17 +17,12 @@ findspark.init()
 os.environ['PYSPARK_PYTHON'] = sys.executable
 os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
 
-# NK tries this with spark-3.3.1-bin-hadoop3 - it fails on save, hadoop3 issue on Windows?
-# os.environ["PYSPARK_SUBMIT_ARGS"] = "--packages com.databricks:spark-xml_2.12-0.16.0 pyspark-shell"
-# sc = SparkSession.builder.appName("WikiCite").config("spark.memory.offHeap.enabled","true")\
-#     .config("spark.memory.offHeap.size","10g").config("spark.jars", "PYSPARK_HOME/jars/spark-xml_2.12-0.9.0.jar") \
-#     .getOrCreate()
-
-
 print("Starting pyspark...")
 sc = SparkContext.getOrCreate()
 sql_context = SQLContext(sc)
 print("Pyspark started...")
+
+PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 
 # ext = "xh_"
 # INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
@@ -68,15 +62,14 @@ CITATIONS_IDS = PROJECT_HOME + 'data/content/{}citations_ids.parquet'.format(ext
 
 # Extract data
 
-# get_data(sql_context, INPUT_DATA, CITATIONS, CITATIONS_CONTENT, 50000)
-# extract_nlp_features(sql_context, CITATIONS_CONTENT, BASE_FEATURES)
-# get_generic_tmpl(sql_context, CITATIONS, CITATIONS_SEPARATED)
-# get_dataset_features(sql_context, BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
-# filter_with_ids(sql_context, CITATIONS_FEATURES, CITATIONS_FEATURES_IDS)
+get_data(sql_context, INPUT_DATA, CITATIONS, CITATIONS_CONTENT, 50000)
+extract_nlp_features(sql_context, CITATIONS_CONTENT, BASE_FEATURES)
+get_generic_tmpl(sql_context, CITATIONS, CITATIONS_SEPARATED)
+get_dataset_features(sql_context, BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
+filter_with_ids(sql_context, CITATIONS_FEATURES, CITATIONS_FEATURES_IDS)
 get_book_journal_features(sql_context, CITATIONS_FEATURES_IDS, BOOK_JOURNAL_CITATIONS)
-
-# get_newspaper_citations(sql_context, CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
-# get_selected_features(sql_context, BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
+get_newspaper_citations(sql_context, CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
+get_selected_features(sql_context, BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
 
 # Optional
 # only_with_ids(sql_context, CITATIONS_SEPARATED, CITATIONS_IDS)
