@@ -1,11 +1,11 @@
-from get_data import get_data
+from get_data import get_data, get_content
 from get_generic_tmpl import get_generic_tmpl, only_with_ids
 from features.extract_nlp_features import extract_nlp_features
 from features.get_dataset_features import get_dataset_features
 from features.get_selected_features import get_selected_features
 from get_book_journal_features import get_book_journal_features, filter_with_ids
 from get_newspaper_citations import get_newspaper_citations
-from pyspark import SparkContext, SQLContext
+from pyspark import SparkConf, SparkContext, SQLContext
 import os
 import sys
 import findspark
@@ -18,17 +18,29 @@ os.environ['PYSPARK_PYTHON'] = sys.executable
 os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
 
 print("Starting pyspark...")
-sc = SparkContext.getOrCreate()
+conf = SparkConf().setAll([
+    ('spark.executor.memory', '8g'),
+    ('spark.executor.cores', '4'),
+    ('spark.num.executors', '20'),
+    ('spark.cores.max', '4'),
+    ('spark.driver.memory','16g'),
+    ('spark.executorEnv.PYTHON_EGG_CACHE', "./.python-eggs/"),
+    ('spark.executorEnv.PYTHON_EGG_DIR', "./.python-eggs/"),
+    ('spark.driverEnv.PYTHON_EGG_CACHE', "./.python-eggs/"),
+    ('spark.driverEnv.PYTHON_EGG_DIR', "./.python-eggs/")
+])
+sc = SparkContext(conf=conf).getOrCreate()
+
 sql_context = SQLContext(sc)
 print("Pyspark started...")
 
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 
-# ext = "xh_"
-# INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
+ext = "xh_"
+INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
 
-ext = "en_"
-INPUT_DATA = PROJECT_HOME + 'data/dumps/enwiki-20221201-pages-articles-multistream1.xml-p1p41242.bz2'
+# ext = "en_"
+# INPUT_DATA = PROJECT_HOME + 'data/dumps/enwiki-20221201-pages-articles-multistream1.xml-p1p41242.bz2'
 
 # ext = "_ro"
 # INPUT_DATA = PROJECT_HOME + 'data/dumps/rowikinews-20230101-pages-articles-multistream.xml.bz2'
@@ -62,14 +74,15 @@ CITATIONS_IDS = PROJECT_HOME + 'data/content/{}citations_ids.parquet'.format(ext
 
 # Extract data
 
-get_data(sql_context, INPUT_DATA, CITATIONS, CITATIONS_CONTENT, 50000)
-extract_nlp_features(sql_context, CITATIONS_CONTENT, BASE_FEATURES)
-get_generic_tmpl(sql_context, CITATIONS, CITATIONS_SEPARATED)
-get_dataset_features(sql_context, BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
-filter_with_ids(sql_context, CITATIONS_FEATURES, CITATIONS_FEATURES_IDS)
-get_book_journal_features(sql_context, CITATIONS_FEATURES_IDS, BOOK_JOURNAL_CITATIONS)
-get_newspaper_citations(sql_context, CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
-get_selected_features(sql_context, BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
+get_data(sql_context, INPUT_DATA, CITATIONS)
+get_content(sql_context, INPUT_DATA, CITATIONS_CONTENT)
+# extract_nlp_features(sql_context, CITATIONS_CONTENT, BASE_FEATURES)
+# get_generic_tmpl(sql_context, CITATIONS, CITATIONS_SEPARATED)
+# get_dataset_features(sql_context, BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
+# filter_with_ids(sql_context, CITATIONS_FEATURES, CITATIONS_FEATURES_IDS)
+# get_book_journal_features(sql_context, CITATIONS_FEATURES_IDS, BOOK_JOURNAL_CITATIONS)
+# get_newspaper_citations(sql_context, CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
+# get_selected_features(sql_context, BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
 
 # Optional
 # only_with_ids(sql_context, CITATIONS_SEPARATED, CITATIONS_IDS)

@@ -1,7 +1,7 @@
 from pyspark.sql.functions import explode, col, split, trim, lower, regexp_replace, expr, udf, lit
 from pyspark.sql.types import Row, StructType, StructField, ArrayType, StringType, BooleanType
 import mwparserfromhell
-from pyspark import SparkContext, SQLContext
+from pyspark import SparkContext, SQLContext, SparkConf
 import os
 import sys
 import findspark
@@ -17,50 +17,40 @@ findspark.init()
 os.environ['PYSPARK_PYTHON'] = sys.executable
 os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
 
-sc = SparkContext.getOrCreate()
+conf = SparkConf().setAll([
+    ('spark.executor.memory', '8g'),
+    ('spark.executor.cores', '4'),
+    ('spark.num.executors', '20'),
+    ('spark.cores.max', '4'),
+    ('spark.driver.memory','16g'),
+    ('spark.executorEnv.PYTHON_EGG_CACHE', "./.python-eggs/"),
+    ('spark.executorEnv.PYTHON_EGG_DIR', "./.python-eggs/"),
+    ('spark.driverEnv.PYTHON_EGG_CACHE', "./.python-eggs/"),
+    ('spark.driverEnv.PYTHON_EGG_DIR', "./.python-eggs/")
+])
+sc = SparkContext(conf=conf).getOrCreate()
 sql_context = SQLContext(sc)
 
 # import nltk
 # nltk.download('popular')
 
-CITATION_TEMPLATES = set([
-    'citation',
-    'cite arxiv',
-    'cite av media',
-    'cite av media notes',
-    'cite book',
-    'cite conference',
-    'cite dvd notes',
-    'cite encyclopedia',
-    'cite episode',
-    'cite interview',
-    'cite journal',
-    'cite mailing list',
-    'cite map',
-    'cite news',
-    'cite newsgroup',
-    'cite podcast',
-    'cite press release',
-    'cite report',
-    'cite serial',
-    'cite sign',
-    'cite speech',
-    'cite techreport',
-    'cite thesis',
-    'cite web'
-])
+CITATION_TEMPLATES = {'citation', 'cite arxiv', 'cite av media', 'cite av media notes', 'cite book', 'cite conference',
+                      'cite dvd notes', 'cite encyclopedia', 'cite episode', 'cite interview', 'cite journal',
+                      'cite mailing list', 'cite map', 'cite news', 'cite newsgroup', 'cite podcast',
+                      'cite press release', 'cite report', 'cite serial', 'cite sign', 'cite speech', 'cite techreport',
+                      'cite thesis', 'cite web'}
 
 
-def get_data(file_in, file_out, file_out2, limit=None):
+def get_data(file_in, file_out, limit=None):
     print("Step 1: Getting citations from XML dump...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
 
     wiki = sql_context.read.format('com.databricks.spark.xml').options(rowTag='page').load(file_in)
-    pages_all = wiki.where('ns = 0').where('redirect is null')
+    pages = wiki.where('ns = 0').where('redirect is null')
 
     # Get only ID, title, revision text's value which we are interested in
-    pages = pages_all['id', 'title', 'revision.text', 'revision.id', 'revision.parentid']
+    pages = pages['id', 'title', 'revision.text', 'revision.id', 'revision.parentid']
     pages = pages.toDF('id', 'title', 'content', 'r_id', 'r_parentid')
 
     def get_citations(page_content):
@@ -88,8 +78,13 @@ def get_data(file_in, file_out, file_out2, limit=None):
          Get each article's citations with their id and title.
          :param line: the wikicode for the article
         """
-        citations = get_citations(line.content)
-        return Row(citations=citations, id=line.id, title=line.title, r_id=line.r_id, r_parentid=line.r_parentid)
+        try:
+            citations = get_citations(line.content)
+            return Row(citations=citations, id=line.id, title=line.title, r_id=line.r_id, r_parentid=line.r_parentid)
+        except Exception as e:
+            print(e)
+            print("Failed to parse", line)
+            return Row(citations=["",""], id="0", title="Skipped", r_id="0", r_parentid="0")
 
     schema = StructType([
         StructField("citations", ArrayType(
@@ -114,19 +109,26 @@ def get_data(file_in, file_out, file_out2, limit=None):
 
     if limit:
         cite_df = cite_df.limit(limit)
+    print("Ready to save...")
+    print("Extracted rows: ", cite_df.count())
     cite_df.write.mode('overwrite').parquet(file_out)
 
-    #################################################
 
+def get_content(file_in, file_out, limit=None):
     print("Step 2: Getting content from XML dump...")
 
+    sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
+
+    wiki = sql_context.read.format('com.databricks.spark.xml').options(rowTag='page').load(file_in)
+    pages = wiki.where('ns = 0').where('redirect is null')
+
     # Get only ID, title, revision text's value which we are interested in
-    pages = pages_all['id', 'title', 'revision.text']
+    pages = pages['id', 'title', 'revision.text']
     pages = pages.toDF('id', 'page_title', 'content')
 
     if limit:
         pages = pages.limit(limit)
-    pages.write.mode('overwrite').parquet(file_out2)
+    pages.write.mode('overwrite').parquet(file_out)
 
 
 def extract_nlp_features(file_in, file_out):
@@ -184,6 +186,7 @@ def extract_nlp_features(file_in, file_out):
     citations_content = sql_context.createDataFrame(citations_content.rdd.map(get_as_row))
     citations_content = citations_content.withColumn('citations_features', explode('citations_features'))
     citations_content.write.mode('overwrite').parquet(file_out)
+    sql_context.clearCache()
 
 
 def get_generic_tmpl(file_in, file_out, lang='en'):
@@ -287,6 +290,7 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
 
     generic_citations = sql_context.createDataFrame(citations.rdd.map(get_as_row))
     generic_citations.write.mode('overwrite').parquet(file_out)
+    sql_context.clearCache()
 
 
 def get_dataset_features(file_in1, file_in2, file_out):
@@ -328,8 +332,8 @@ def get_dataset_features(file_in1, file_in2, file_out):
 
     # Drop the column since there are 2 columns with citations
     filtered = filtered.drop('retrieved_citation')
-
     filtered.write.mode('overwrite').parquet(file_out)
+    sql_context.clearCache()
 
 
 # Select entries with won-empty ID_list
@@ -346,6 +350,7 @@ def filter_with_ids(file_in, file_out):
     citation_with_ids = citation_with_ids.dropDuplicates()
     print("Length filtered:", citation_with_ids.count())
     citation_with_ids.write.mode('overwrite').parquet(file_out)
+    sql_context.clearCache()
 
 
 def get_book_journal_features(file_in, file_out):
@@ -441,6 +446,7 @@ def get_book_journal_features(file_in, file_out):
     citation_with_ids = citation_with_ids.dropDuplicates(['id', 'citations'])
     print('The number of unique citations_with_ids: {}'.format(citation_with_ids.count()))
     citation_with_ids.write.mode('overwrite').parquet(file_out)
+    sql_context.clearCache()
 
 
 def get_newspaper_citations(file_in, file_out):
@@ -477,6 +483,7 @@ def get_newspaper_citations(file_in, file_out):
     # NK I added elimination of " to match citations with features
     citations_separated = citations_separated.withColumn('citations', regexp_replace('citations', '"', ''))
     citations_separated.write.mode('overwrite').parquet(file_out)
+    sql_context.clearCache()
 
 
 def get_selected_features(file_in1, file_in2, file_out):
@@ -507,13 +514,14 @@ def get_selected_features(file_in1, file_in2, file_out):
 
     results = results.drop('retrieved_citation')
     results.write.mode('overwrite').parquet(file_out)
+    sql_context.clearCache()
 
 
 # Files
 PROJECT_HOME = "gs://wikicite-1/"
 # PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
-ext = "en_"
-INPUT_DATA = PROJECT_HOME + 'data/dumps/enwiki-20221201-pages-articles-multistream1.xml-p1p41242.bz2'
+ext = "en_full_"
+INPUT_DATA = PROJECT_HOME + 'data/dumps/enwiki-20230220-pages-articles.xml.bz2'
 # ext = "xh_"
 # INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
 
@@ -527,9 +535,9 @@ BOOK_JOURNAL_CITATIONS = PROJECT_HOME + 'data/features/{}book_journal_citations.
 NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/{}newspaper_citations.parquet'.format(ext)
 NEWSPAPER_FEATURES = PROJECT_HOME + 'data/features/{}newspaper_citation_features.parquet'.format(ext)
 
-
 # Data extraction steps
-get_data(INPUT_DATA, CITATIONS, CITATIONS_CONTENT)
+# get_data(INPUT_DATA, CITATIONS)
+get_content(INPUT_DATA, CITATIONS_CONTENT)
 extract_nlp_features(CITATIONS_CONTENT, BASE_FEATURES)
 get_generic_tmpl(CITATIONS, CITATIONS_SEPARATED)
 get_dataset_features(BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)

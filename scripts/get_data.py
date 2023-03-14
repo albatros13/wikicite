@@ -3,16 +3,16 @@ from pyspark.sql.types import Row, StructType, StructField, ArrayType, StringTyp
 import mwparserfromhell
 
 
-def get_data(sql_context, file_in, file_out, file_out2, limit=None):
+def get_data(sql_context, file_in, file_out, limit=None):
     print("Step 1: Getting citations from XML dump...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
 
     wiki = sql_context.read.format('com.databricks.spark.xml').options(rowTag='page').load(file_in)
-    pages_all = wiki.where('ns = 0').where('redirect is null')
+    pages = wiki.where('ns = 0').where('redirect is null')
 
     # Get only ID, title, revision text's value which we are interested in
-    pages = pages_all['id', 'title', 'revision.text', 'revision.id', 'revision.parentid']
+    pages = pages['id', 'title', 'revision.text', 'revision.id', 'revision.parentid']
     pages = pages.toDF('id', 'title', 'content', 'r_id', 'r_parentid')
 
     def get_citations(page_content):
@@ -40,8 +40,13 @@ def get_data(sql_context, file_in, file_out, file_out2, limit=None):
          Get each article's citations with their id and title.
          :param line: the wikicode for the article
         """
-        citations = get_citations(line.content)
-        return Row(citations=citations, id=line.id, title=line.title, r_id=line.r_id, r_parentid=line.r_parentid)
+        try:
+            citations = get_citations(line.content)
+            return Row(citations=citations, id=line.id, title=line.title, r_id=line.r_id, r_parentid=line.r_parentid)
+        except Exception as e:
+            print(e)
+            print("Failed to parse", line)
+            return Row(citations=["",""], id="0", title="Skipped", r_id="0", r_parentid="0")
 
     schema = StructType([
         StructField("citations", ArrayType(
@@ -66,16 +71,25 @@ def get_data(sql_context, file_in, file_out, file_out2, limit=None):
 
     if limit:
         cite_df = cite_df.limit(limit)
+    print("Ready to save...")
+    print("Extracted rows: ", cite_df.count())
     cite_df.write.mode('overwrite').parquet(file_out)
+    sql_context.clearCache()
 
-    #################################################
 
+def get_content(sql_context, file_in, file_out, limit=None):
     print("Step 2: Getting content from XML dump...")
 
+    sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
+
+    wiki = sql_context.read.format('com.databricks.spark.xml').options(rowTag='page').load(file_in)
+    pages = wiki.where('ns = 0').where('redirect is null')
+
     # Get only ID, title, revision text's value which we are interested in
-    pages = pages_all['id', 'title', 'revision.text']
+    pages = pages['id', 'title', 'revision.text']
     pages = pages.toDF('id', 'page_title', 'content')
 
     if limit:
         pages = pages.limit(limit)
-    pages.write.mode('overwrite').parquet(file_out2)
+    pages.write.mode('overwrite').parquet(file_out)
+    sql_context.clearCache()
