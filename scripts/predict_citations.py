@@ -5,10 +5,12 @@ import pandas as pd
 from tqdm import tqdm
 from itertools import chain
 from collections import Counter
+import tensorflow as tf
 from keras.models import load_model
 from gensim.models import FastText
 from citation_classifier_helper import prepare_time_features, prepare_citation_word_features, \
-    prepare_auxiliary_features, prepare_citation_tag_features, join_auxiliary_with_text
+    encode_sections, encode_citation_tag_features, join_auxiliary_with_text, \
+    prepare_citation_embedding, encode_auxuliary
 
 
 import warnings
@@ -26,8 +28,6 @@ def update_ids(x):
 
 
 def prepare_time_sequence_features(tag_features, word_features):
-    print("PREPARING TIME SEQUENCE FEATURES...")
-
     # Join time sequence features with the citations dataset
     time_sequence_features = pd.concat([tag_features, word_features
                                        .reset_index(drop=True)], keys=['id', 'citations'], axis=1)
@@ -38,8 +38,6 @@ def prepare_time_sequence_features(tag_features, word_features):
                                                  time_sequence_features['words_embedding']]
     time_sequence_features['words_embedding'] = time_sequence_features['words_embedding'].progress_apply(
         lambda x: list(x))
-
-    print("PREPARING TIME SEQUENCE FEATURES - DONE!")
     return time_sequence_features
 
 
@@ -53,8 +51,10 @@ def predict_citations(PROJECT_HOME, ext):
     LARGEST_SECTIONS = PROJECT_HOME + 'data/features/{}largest_sections.csv'.format(ext)
     RESULT_FILE = PROJECT_HOME + 'data/content/' + ext + 'result_{}.csv'
 
-    TAG_COUNT = PROJECT_HOME + '/data/features/{}tag_counts.csv'.format(ext)
-    CHAR_COUNT = PROJECT_HOME + '/data/features/{}char_counts.csv'.format(ext)
+    # TAG_COUNT = PROJECT_HOME + '/data/features/{}tag_counts.csv'.format(ext)
+    # CHAR_COUNT = PROJECT_HOME + '/data/features/{}char_counts.csv'.format(ext)
+    # original_tag_counts = pd.read_csv(TAG_COUNT, header=None)
+    # original_tag_counts.rename({0: 'tag', 1: 'count'}, axis=1, inplace=True)
 
     MODEL_EMBEDDEDING = '../data/model/{}embedding_model.h5'.format(ext)
     MODEL_CITATION_EPOCHS_H5 = '../data/model/' + ext + 'citation_model_epochs_{}.h5'
@@ -63,14 +63,11 @@ def predict_citations(PROJECT_HOME, ext):
     largest_sections = pd.read_csv(LARGEST_SECTIONS, header=None)
     largest_sections.rename({0: 'section_name', 1: 'count'}, axis=1, inplace=True)
 
-    # original_tag_counts = pd.read_csv(TAG_COUNT, header=None)
-    # original_tag_counts.rename({0: 'tag', 1: 'count'}, axis=1, inplace=True)
-
+    EPOCHS = 3
     # Load the pretrained embedding model on wikipedia
     model_fasttext = FastText.load(FASTTEXT_MODEL)
-
     model_embedding = load_model(MODEL_EMBEDDEDING)
-    model = load_model(MODEL_CITATION_EPOCHS_H5.format(30))
+    model = load_model(MODEL_CITATION_EPOCHS_H5.format(EPOCHS))
 
     print('Loaded files and intermediary files...')
 
@@ -104,32 +101,6 @@ def predict_citations(PROJECT_HOME, ext):
         else:
             return 'NO LABEL'
 
-    # Generate text features
-    def prepare_citation_text_features(auxiliary_features):
-        citation_text_features = auxiliary_features['citations']
-
-        # Convert the citation into a list by breaking it down into characters
-        citation_text_features = citation_text_features.progress_apply(lambda x: list(x))
-
-        char_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_text_features)))
-
-        # original_char_counts = pd.read_csv(CHAR_COUNT, header=None)
-
-        char2ind = {char[0]: i for i, char in enumerate(char_counts.index)}
-
-        citation_layer = model_embedding.get_layer('citation_embedding')
-        citation_weights = citation_layer.get_weights()[0]
-        citation_text_features = citation_text_features.to_frame()
-
-        # Map the embedding of each character to the character in each corresponding citation and aggregate (sum)
-        citation_text_features['embedding'] = citation_text_features['citations'].progress_apply(
-            lambda x: sum([(citation_weights[char2ind[c]] if c in char2ind else 0) for c in x]))
-
-        # Normalize the citation embeddings so that we can check for their similarity later
-        citation_text_features['embedding'] = citation_text_features['embedding'].progress_apply(
-            lambda x: x / np.linalg.norm(x, axis=0).reshape((-1, 1)))
-        return citation_text_features
-
     FILES = os.listdir(CITATIONS_FEATURES)
 
     for index__, f_name in enumerate(FILES):
@@ -140,8 +111,9 @@ def predict_citations(PROJECT_HOME, ext):
         f_name_path = '{}/{}'.format(CITATIONS_FEATURES, f_name)
         all_examples = pd.read_parquet(f_name_path, engine='pyarrow')
 
-        # TODO NK Remove
-        all_examples = all_examples.head(400000)
+        # TODO NK Remove - 350k are enough to get all 35 tags present
+        all_examples = all_examples.head(350000)
+        # all_examples = all_examples.head(10000)
 
         print('Doing filename: {} with citations: {}'.format(f_name, all_examples.shape[0]))
         all_examples['real_citation_text'] = all_examples['citations']
@@ -163,20 +135,28 @@ def predict_citations(PROJECT_HOME, ext):
         print('Any sections in the parent section: {}'.format(
             not any([True if i in list(largest_sections['section_name']) else False for i in set(wild_examples['sections'])])))
 
+        # predict: 'sections', 'citations', 'ref_index', 'total_words', 'neighboring_tags', 'neighboring_words'
+        # train:   'sections', 'citations', 'ref_index', 'total_words', 'neighboring_tags', 'id', 'label_category'
         auxiliary_features = wild_examples[
-            ['sections', 'citations', 'ref_index', 'neighboring_words', 'total_words', 'neighboring_tags']]
-        auxiliary_features = prepare_auxiliary_features(auxiliary_features, largest_sections['section_name'])
+            ['sections', 'citations', 'ref_index', 'total_words', 'neighboring_tags', 'neighboring_words']]
+        auxiliary_features = encode_sections(auxiliary_features, largest_sections['section_name'])
 
-        citation_tag_features = prepare_citation_tag_features(auxiliary_features[['citations', 'neighboring_tags']])
+        citation_tag_features = encode_citation_tag_features(
+            auxiliary_features[['citations', 'neighboring_tags']])
 
-        citation_text_features = prepare_citation_text_features(auxiliary_features)
+        citation_text_features = auxiliary_features[['citations']]
+        # Convert the citation into a list by breaking it down into characters
+        citation_text_features['characters'] = citation_text_features['citations'].progress_apply(lambda x: list(x))
 
-        citation_word_features = auxiliary_features[['citations', 'neighboring_words']]
-        citation_word_features = prepare_citation_word_features(citation_word_features, model_fasttext)
+        citation_text_features = prepare_citation_embedding(citation_text_features, model_embedding)
 
-        # Join auxiliary features with the citations dataset
+        citation_word_features = prepare_citation_word_features(
+            auxiliary_features[['citations', 'neighboring_words']], model_fasttext)
+
+        # Join auxiliary features with the citations dataset and encode
         auxiliary_features = join_auxiliary_with_text(auxiliary_features, citation_text_features)
-        auxiliary_features.drop(['neighboring_tags'], axis=1, inplace=True)
+
+        auxiliary = encode_auxuliary(auxiliary_features)
 
         time_sequence_features = prepare_time_sequence_features(citation_tag_features, citation_word_features)
 
@@ -184,18 +164,13 @@ def predict_citations(PROJECT_HOME, ext):
 
         # Classify citations
 
-        # Make a mask for auxiliary dataset to get all features except the one below
-        column_mask_aux = ~auxiliary_features.columns.isin(['citations', 'neighboring_words'])
-        auxiliary = auxiliary_features.loc[:, column_mask_aux].values.tolist()
-        auxiliary = [np.array(auxiliary[i][0][0] + auxiliary[i][1:]) for i in tqdm(range(len(auxiliary)))]
-
         print('Features for model constructed.. now running model')
 
         # RUN MODEL
-        # print("Input data (time): ", len(time_pca[100]))
-        # print("Input data (aux): ", len(np.array(auxiliary)[100]))
+        print("Input data (time): ", len(time_pca[100]))
+        print("Input data (aux): ", len(np.array(auxiliary)[100]))
 
-        prediction = model.predict([time_pca, np.array(auxiliary)])
+        prediction = model.predict([time_pca, auxiliary])
         print('Shape of prediction: {}'.format(prediction.shape))
         y_pred = np.argmax(prediction, axis=1)
         wild_examples['label_category'] = y_pred

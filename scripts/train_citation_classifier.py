@@ -20,8 +20,9 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 
-from citation_classifier_helper import prepare_citation_word_features, prepare_auxiliary_features, \
-    join_auxiliary_with_text, prepare_citation_tag_features, prepare_time_features
+from citation_classifier_helper import prepare_citation_word_features, encode_sections, \
+    join_auxiliary_with_text, encode_citation_tag_features, prepare_time_features, \
+    prepare_citation_embedding, encode_auxuliary
 
 
 ext = "en_"
@@ -59,8 +60,6 @@ np.random.seed(0)
 
 
 def prepare_labelled_dataset():
-    print("PREPARING LABELLED DATASET...")
-
     # BOOKS AND JOURNALS
     book_journal_features = pd.read_parquet(BOOK_JOURNAL_CITATIONS, engine='pyarrow')
 
@@ -115,63 +114,39 @@ def prepare_labelled_dataset():
     dataset_with_features = dataset_with_features.drop_duplicates(subset=['id', 'citations'])
     dataset_with_features = dataset_with_features.reset_index(drop=True)
     print("Final labelled dataset dimensions: ", dataset_with_features.shape)
-    print("PREPARING LABELLED DATASET - DONE!")
     return dataset_with_features
 
 
-def encode_citation_type(auxiliary_features):
+def encode_citation_type(aux_features):
     # Get one hot encoding of citation_type column
-    if 'citation_type' in auxiliary_features:
-        citation_type_encoding = pd.get_dummies(auxiliary_features['citation_type'])
+    if 'citation_type' in aux_features:
+        citation_type_encoding = pd.get_dummies(aux_features['citation_type'])
         # Drop column citation_type as it is now encoded and join it
-        auxiliary_features = auxiliary_features.drop('citation_type', axis=1)
+        aux_features = aux_features.drop('citation_type', axis=1)
         # Concat columns of the dummies along the axis with the matching index
-        auxiliary_features = pd.concat([auxiliary_features, citation_type_encoding], axis=1)
+        aux_features = pd.concat([aux_features, citation_type_encoding], axis=1)
 
-    print('Total mean length of entertainment articles: {}'.format(
-        auxiliary_features[auxiliary_features['label_category'] == 1]['total_words'].mean()))
-    print('Total median length of entertainment articles: {}'.format(
-        auxiliary_features[auxiliary_features['label_category'] == 1]['total_words'].median()))
+    # print('Total mean length of entertainment articles: {}'.format(
+    #     aux_features[aux_features['label_category'] == 1]['total_words'].mean()))
+    # print('Total median length of entertainment articles: {}'.format(
+    #     aux_features[aux_features['label_category'] == 1]['total_words'].median()))
+    #
+    # print('Total mean length of journal articles: {}'.format(
+    #     aux_features[aux_features['label_category'] == 2]['total_words'].mean()))
+    # print('Total median length of journal articles: {}'.format(
+    #     aux_features[aux_features['label_category'] == 2]['total_words'].median()))
+    #
+    # print('Total mean length of book articles: {}'.format( # Books - length is less
+    #     aux_features[aux_features['label_category'] == 0]['total_words'].mean()))
+    # print('Total median length of book articles: {}'.format(
+    #     aux_features[aux_features['label_category'] == 0]['total_words'].median()))
 
-    print('Total mean length of journal articles: {}'.format(
-        auxiliary_features[auxiliary_features['label_category'] == 2]['total_words'].mean()))
-    print('Total median length of journal articles: {}'.format(
-        auxiliary_features[auxiliary_features['label_category'] == 2]['total_words'].median()))
-
-    print('Total mean length of book articles: {}'.format( # Books - length is less
-        auxiliary_features[auxiliary_features['label_category'] == 0]['total_words'].mean()))
-    print('Total median length of book articles: {}'.format(
-        auxiliary_features[auxiliary_features['label_category'] == 0]['total_words'].median()))
-
-    return auxiliary_features
-
-
-def prepare_citation_text_features(dataset_with_features):
-    print("PREPARING CITATION_TEXT_FEATURES...")
-    # Features for the LSTM - more time sequence related
-    # Citation's original text features
-
-    # Create a separate dataframe for preprocessing citation text
-    citation_text_features = dataset_with_features[['id', 'citations', 'label_category']]
-
-    # Convert the citation into a list by breaking it down into characters
-    citation_text_features['characters'] = citation_text_features['citations'].progress_apply(lambda x: list(x))
-
-    # Get the character counts for each unique character
-    print('The max length of the longest citation in terms of characters is: {}'.format(
-        max(citation_text_features.characters.apply(lambda x: len(x)))))
-    print('The mean length of the longest citation in terms of characters is: {}'.format(
-        citation_text_features.characters.apply(lambda x: len(x)).mean()))
-    print('The median length of the longest citation in terms of characters is: {}'.format(
-        citation_text_features.characters.apply(lambda x: len(x)).median()))
-
-    print("PREPARING CITATION_TEXT_FEATURES - DONE")
-    return citation_text_features
+    return aux_features
 
 
-def prepare_data(citation_text_features):
-    print("PREPARING DATA...")
-    char_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_text_features.characters)))
+# NK TODO reuse for classifier based on citation text alone
+def prepare_data(text_features):
+    char_counts = pd.Series(Counter(chain.from_iterable(x for x in text_features.characters)))
     # char_counts.to_csv(CHAR_COUNT, header=None)
     # Make a dictionary for creating a mapping between the char and the corresponding index
     char2ind = {char: i for i, char in enumerate(char_counts.index)}
@@ -179,7 +154,7 @@ def prepare_data(citation_text_features):
 
     # Map each character into the citation to its corresponding index and store it in a list
     X_char = []
-    for citation in citation_text_features.citations:
+    for citation in text_features.citations:
         citation_chars = []
         for character in citation:
             citation_chars.append(char2ind[character])
@@ -193,44 +168,39 @@ def prepare_data(citation_text_features):
     # for getting the character embeddings
     data = []
     for i in tqdm(range(len(X_char))):
-        data.append((X_char[i], int(citation_text_features.iloc[i]['label_category'])))
+        data.append((X_char[i], int(text_features.iloc[i]['label_category'])))
+
     print("Final data dimensions: ", len(data), len(data[0]))
-    print("PREPARING DATA - DONE!")
     return data
 
 
 def prepare_time_sequence_features(tag_features, word_features, data):
-    print("PREPARING TIME SEQUENCE FETURES...")
-
     # Join time sequence features with the citations dataset
-    time_sequence_features = pd.concat([tag_features, word_features.reset_index(drop=True)],
+    time_seq_features = pd.concat([tag_features, word_features.reset_index(drop=True)],
                                        keys=['id', 'citations'], axis=1)
-    time_sequence_features = time_sequence_features.loc[:, ~time_sequence_features.columns.duplicated()]
-    print('Total number of samples in time features are: {}'.format(time_sequence_features.shape))
+    time_seq_features = time_seq_features.loc[:, ~time_seq_features.columns.duplicated()]
+    print('Total number of samples in time features are: {}'.format(time_seq_features.shape))
 
-    # Join the time sequence features for the data
-    time_sequence_features = pd.concat([time_sequence_features['id'], time_sequence_features['citations']], axis=1)
+    time_seq_features = pd.concat([time_seq_features['id'], time_seq_features['citations']], axis=1)
 
-    time_sequence_features = pd.concat([time_sequence_features, data.reset_index(drop=True)],
+    time_seq_features = pd.concat([time_seq_features, data.reset_index(drop=True)],
                                        keys=['id', 'citations'], axis=1)
-    time_sequence_features.columns = time_sequence_features.columns.droplevel(0)
+    time_seq_features.columns = time_seq_features.columns.droplevel(0)
 
-    time_sequence_features = time_sequence_features.loc[:, ~time_sequence_features.columns.duplicated()]
-    time_sequence_features['words_embedding'] = time_sequence_features['words_embedding'].progress_apply(
+    time_seq_features = time_seq_features.loc[:, ~time_seq_features.columns.duplicated()]
+    time_seq_features['words_embedding'] = time_seq_features['words_embedding'].progress_apply(
         lambda x: [x] if isinstance(x, int) else x.tolist())
 
-    print("PREPARING TIME SEQUENCE FEATURES - DONE!")
-    return time_sequence_features
+    return time_seq_features
 
 
-def citation_embedding_model():
+def citation_embedding_model(input_dim):
     """
     Citation embedding generator model where the dimension of the embedding is 50.
     """
     main_input = Input(shape=(400,), name='characters')
-    # input dim is basically the vocab size
-    # emb = Embedding(input_dim=95, output_dim=300, name='citation_embedding')(main_input)
-    emb = Embedding(input_dim=312, output_dim=300, name='citation_embedding')(main_input)
+    # input_dim is basically the vocab size
+    emb = Embedding(input_dim=input_dim, output_dim=300, name='citation_embedding')(main_input)
     rnn = Bidirectional(LSTM(20))
     x = rnn(emb)
     de = Dense(3, activation='softmax')(x)
@@ -258,37 +228,8 @@ def generator(features, categorical_labels, batch_size):
         yield batch_features, batch_labels
 
 
-def prepare_citation_embedding(citation_text_features, model):
-    print("PREPARING CITATION EMBEDDING...")
-    char_counts = pd.Series(Counter(chain.from_iterable(x for x in citation_text_features.characters)))
-
-    # Make a dictionary for creating a mapping between the char and the corresponding index
-    char2ind = {char: i for i, char in enumerate(char_counts.index)}
-    citation_layer = model.get_layer('citation_embedding')
-    citation_weights = citation_layer.get_weights()[0]
-    # print("char2ind: ", char2ind)
-
-    # Map the embedding of each character to the character in each corresponding citation and aggregate (sum)
-    citation_text_features['embedding'] = citation_text_features['characters'].progress_apply(
-        lambda x: sum([citation_weights[char2ind[c]] for c in x]))
-
-    # Normalize the citation embeddings so that we can check for their similarity later
-    citation_text_features['embedding'] = citation_text_features['embedding'].progress_apply(
-        lambda x: x / np.linalg.norm(x, axis=0).reshape((-1, 1)))
-
-    # Make the sum of the embedding to be summed up to 1
-    np.sum(np.square(citation_text_features['embedding'].iloc[0]))
-
-    # Just considering 20 since otherwise it will be computationally extensive
-    # citation_text_and_embeddings = citation_text_features[['citations', 'embedding']][:500]
-    # citation_text_and_embeddings['embedding'] = citation_text_and_embeddings['embedding'].progress_apply(
-    #     lambda x: x[0].tolist()
-    # )
-    print("PREPARING CITATION EMBEDDING - DONE!")
-    return citation_text_features
-
-
-def tsne_embedding_plot(citation_text_and_embeddings):
+def tsne_embedding_plot(text_features):
+    citation_text_and_embeddings = text_features[['citations', 'embedding']][:500]
     labels = []
     tokens = []
 
@@ -374,13 +315,14 @@ def train_model(data):
     categorical_labels = to_categorical(training_labels, num_classes=3)
     # categorical_test_labels = to_categorical(testing_labels, num_classes=3)
 
+    print("Input dimension?", len(training_data[0])) #
     # Instantiate the model and generate the summary
-    model = citation_embedding_model()
+    model = citation_embedding_model(312)
 
     # NK The argument steps_per_epoch should be equal to the total number of samples (length of your training set)
     # divided by batch_size
     BATCH_SIZE = 8
-    steps = len(training_data) # // batch_size
+    steps = len(training_data) #
     print("Steps per epoch: ", steps)
     # Run the model with the data being generated by the generator with a batch size of 64
     # and number of epochs to be set to 15
@@ -388,7 +330,7 @@ def train_model(data):
     model.fit_generator(generator(training_data, categorical_labels, BATCH_SIZE), steps_per_epoch=steps, epochs=2)
 
     # Evaluation of embedding model
-    print(np.array(testing_data).shape)
+    print("Testing data shape:", np.array(testing_data).shape)
 
     y_predicted_proba = model.predict(np.array(testing_data))
     predicted_class = np.argmax(y_predicted_proba, axis=1)
@@ -432,24 +374,17 @@ def classification_model(tags_count, input_length):
     return model
 
 
-def train_classification_model(tags_count, auxiliary_features, time_pca):
+def train_classification_model(tags_count, auxiliary, time_pca, label_categories):
     # We use `ReduceLRonPlateau` so that the model does not overshoot the optimal minimum point and hence by default we
     # start with a learning rate of 0.01 but as soon as the accuracy stop increasing the learning rate does not change
     # which helps us converge better.
 
-    # Make a mask for auxiliary dataset to get all features except the one below
-    column_mask_aux = ~auxiliary_features.columns.isin(['id', 'citations', 'label_category'])
-    # Get the columns of those auxiliary features and covert them into a list
-    auxiliary = auxiliary_features.loc[:, column_mask_aux].values.tolist()
-    # Convert them into numpy array (for Keras) and stack them (if needed) as suited for the model's format
-    auxiliary = [np.array(auxiliary[i][0][0] + auxiliary[i][1:]) for i in tqdm(range(len(auxiliary)))]
-    auxiliary = np.asarray(auxiliary)
-
     # Get the labels which will be split later
-    y = auxiliary_features.loc[:, 'label_category'].astype(int).tolist()
-    y = np.asarray(y)
+    y = np.asarray(label_categories)
 
-    EPOCHS = 30
+    # EPOCHS = 30
+    # NK for faster testing
+    EPOCHS = 3
 
     x_train_indices, x_test_indices, y_train_indices, y_test_indices = train_test_split(
         range(auxiliary.shape[0]), range(y.shape[0]), train_size=0.9, stratify=y, shuffle=True
@@ -470,9 +405,7 @@ def train_classification_model(tags_count, auxiliary_features, time_pca):
     print('Running model with epochs: {}'.format(EPOCHS))
 
     # NK reuse model for quick testing
-    # model = load_model(MODEL_CITATION_EPOCHS_H5.format(30))
-
-    print("Dimensions: ", aux_train.shape[1])
+    # model = load_model(MODEL_CITATION_EPOCHS_H5.format(EPOCHS))
 
     model = classification_model(tags_count, aux_train.shape[1])
     training_generator = generator_nn(aux_train, time_train, y_train, BATCH_SIZE)
@@ -518,44 +451,59 @@ if __name__ == '__main__':
     # re-load labelled dataset
     dataset_with_features = pd.read_csv(DATASET_WITH_FEATURES)
 
-    # Convert strings to arrays
-    for col in ['neighboring_tags', 'neighboring_words']:
+    # NK Convert strings to arrays
+    for col in ['neighboring_tags', 'neighboring_words', 'sections']:
         dataset_with_features[col] = dataset_with_features[col].progress_apply(
              lambda x: x.replace("'", "").replace('[', '').replace(']', '').replace('\n', '').split(','))
 
+    # 'sections', 'citations', 'id', 'ref_index', 'total_words', 'neighboring_tags', 'label_category'
     auxiliary_features = dataset_with_features[
             ['sections', 'citations', 'id', 'ref_index', 'total_words', 'neighboring_tags', 'label_category']]
+
     # section_counts = pd.Series(Counter(chain.from_iterable(x for x in auxiliary_features.sections)))
     # largest_sections = section_counts.nlargest(150)
     # largest_sections.to_csv(LARGEST_SECTIONS, header=None)
 
     # re-load largest sections
     largest_sections = pd.read_csv(LARGEST_SECTIONS, header=None)
+    largest_sections.rename({0: 'section_name', 1: 'count'}, axis=1, inplace=True)
 
-    auxiliary_features = prepare_auxiliary_features(auxiliary_features, largest_sections)
+    # largest_sections.index
+    auxiliary_features = encode_sections(auxiliary_features, largest_sections['section_name'])
     auxiliary_features = encode_citation_type(auxiliary_features)
 
-    citation_tag_features = prepare_citation_tag_features(
+    citation_tag_features = encode_citation_tag_features(
         auxiliary_features[['id', 'citations', 'neighboring_tags']])
 
-    citation_text_features = prepare_citation_text_features(dataset_with_features)
+    citation_text_features = auxiliary_features[['id', 'citations', 'label_category']]
+    # Convert the citation into a list by breaking it down into characters
+    citation_text_features['characters'] = citation_text_features['citations'].progress_apply(lambda x: list(x))
 
-    # data = prepare_data(citation_text_features)
+    # Get the character counts for each unique character
+    # print('The max length of the longest citation in terms of characters is: {}'.format(
+    #     max(citation_text_features.characters.apply(lambda x: len(x)))))
+    # print('The mean length of the longest citation in terms of characters is: {}'.format(
+    #     citation_text_features.characters.apply(lambda x: len(x)).mean()))
+    # print('The median length of the longest citation in terms of characters is: {}'.format(
+    #     citation_text_features.characters.apply(lambda x: len(x)).median()))
+
+    data = prepare_data(citation_text_features)
+
     # model = train_model(data)
-    model = load_model(EMBEDDING_MODEL)
 
+    model = load_model(EMBEDDING_MODEL)
     citation_text_features = prepare_citation_embedding(citation_text_features, model)
 
     # This is optional, just to see a plot
-    # citation_text_and_embeddings = citation_text_features[['citations', 'embedding']][:500]
-    # tsne_embedding_plot(citation_text_and_embeddings)
+    # tsne_embedding_plot(citation_text_features)
 
     model = FastText.load(FASTTEXT_MODEL)
-    citation_word_features = dataset_with_features[['id', 'citations', 'neighboring_words', 'label_category']]
-    citation_word_features = prepare_citation_word_features(citation_word_features, model)
+    citation_word_features = prepare_citation_word_features(
+        dataset_with_features[['id', 'citations', 'neighboring_words', 'label_category']], model)
 
+    # Join auxiliary features with the citations dataset and encode
     auxiliary_features = join_auxiliary_with_text(auxiliary_features, citation_text_features)
-    auxiliary_features.drop(['neighboring_tags', 'characters'], axis=1, inplace=True)
+    auxiliary = encode_auxuliary(auxiliary_features)
 
     time_sequence_features = prepare_time_sequence_features(
         citation_tag_features, citation_word_features, dataset_with_features[['id', 'citations', 'label_category']]
@@ -563,4 +511,8 @@ if __name__ == '__main__':
 
     time_pca, tags_count = prepare_time_features(time_sequence_features, ['id', 'citations', 'label_category', 'neighboring_words'])
 
-    train_classification_model(tags_count, auxiliary_features, time_pca)
+    print("Input data (time): ", len(time_pca[100]))
+    print("Input data (aux): ", len(np.array(auxiliary)[100]))
+
+    label_categories = auxiliary_features.loc[:, 'label_category'].astype(int).tolist()
+    train_classification_model(tags_count, auxiliary, time_pca, label_categories)
