@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Get newspaper citations based on the Top level domain from the URL feature of the citations.
-Can also be used for extraction of entertainment/videos citations
 """
 
 import tldextract
@@ -9,7 +8,7 @@ from pyspark.sql.functions import udf, col, regexp_replace
 
 
 def get_newspaper_citations(sql_context, file_in, file_out):
-    print("Step 7: Getting newspaper citations...")
+    print("Step 7: Getting news citations...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     citations_separated = sql_context.read.parquet(file_in)

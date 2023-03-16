@@ -5,12 +5,11 @@ import pandas as pd
 from tqdm import tqdm
 from itertools import chain
 from collections import Counter
-import tensorflow as tf
 from keras.models import load_model
 from gensim.models import FastText
 from citation_classifier_helper import prepare_time_features, prepare_citation_word_features, \
     encode_sections, encode_citation_tag_features, join_auxiliary_with_text, \
-    prepare_citation_embedding, encode_auxuliary
+    prepare_citation_embedding, encode_auxuliary, encode_citation_type, embed_citation_text
 
 
 import warnings
@@ -63,7 +62,7 @@ def predict_citations(PROJECT_HOME, ext):
     largest_sections = pd.read_csv(LARGEST_SECTIONS, header=None)
     largest_sections.rename({0: 'section_name', 1: 'count'}, axis=1, inplace=True)
 
-    EPOCHS = 3
+    EPOCHS = 10
     # Load the pretrained embedding model on wikipedia
     model_fasttext = FastText.load(FASTTEXT_MODEL)
     model_embedding = load_model(MODEL_EMBEDDEDING)
@@ -140,6 +139,7 @@ def predict_citations(PROJECT_HOME, ext):
         auxiliary_features = wild_examples[
             ['sections', 'citations', 'ref_index', 'total_words', 'neighboring_tags', 'neighboring_words']]
         auxiliary_features = encode_sections(auxiliary_features, largest_sections['section_name'])
+        auxiliary_features = encode_citation_type(auxiliary_features)
 
         citation_tag_features = encode_citation_tag_features(
             auxiliary_features[['citations', 'neighboring_tags']])
@@ -148,31 +148,36 @@ def predict_citations(PROJECT_HOME, ext):
         # Convert the citation into a list by breaking it down into characters
         citation_text_features['characters'] = citation_text_features['citations'].progress_apply(lambda x: list(x))
 
-        citation_text_features = prepare_citation_embedding(citation_text_features, model_embedding)
-
-        citation_word_features = prepare_citation_word_features(
-            auxiliary_features[['citations', 'neighboring_words']], model_fasttext)
-
-        # Join auxiliary features with the citations dataset and encode
-        auxiliary_features = join_auxiliary_with_text(auxiliary_features, citation_text_features)
-
-        auxiliary = encode_auxuliary(auxiliary_features)
-
-        time_sequence_features = prepare_time_sequence_features(citation_tag_features, citation_word_features)
-
-        time_pca, tags_count = prepare_time_features(time_sequence_features, ['citations', 'neighboring_words'])
-
-        # Classify citations
-
-        print('Features for model constructed.. now running model')
-
-        # RUN MODEL
-        print("Input data (time): ", len(time_pca[100]))
-        print("Input data (aux): ", len(np.array(auxiliary)[100]))
-
-        prediction = model.predict([time_pca, auxiliary])
-        print('Shape of prediction: {}'.format(prediction.shape))
+        data = embed_citation_text(citation_text_features)
+        print("Prediction data shape:", np.array(data).shape)
+        prediction = model_embedding.predict(np.array(data))
         y_pred = np.argmax(prediction, axis=1)
+        wild_examples['label_category'] = y_pred
+
+        # citation_text_features = prepare_citation_embedding(citation_text_features, model_embedding)
+        #
+        # citation_word_features = prepare_citation_word_features(
+        #     auxiliary_features[['citations', 'neighboring_words']], model_fasttext)
+        #
+        # # Join auxiliary features with the citations dataset and encode
+        # auxiliary_features = join_auxiliary_with_text(auxiliary_features, citation_text_features)
+        #
+        # auxiliary = encode_auxuliary(auxiliary_features)
+        #
+        # time_sequence_features = prepare_time_sequence_features(citation_tag_features, citation_word_features)
+        #
+        # time_pca, tags_count = prepare_time_features(time_sequence_features, ['citations', 'neighboring_words'])
+        #
+        # # Classify citations
+        #
+        # print('Features for model constructed.. now running model')
+        #
+        # # RUN MODEL
+        #
+        # prediction = model.predict([time_pca, auxiliary])
+        # print('Shape of prediction: {}'.format(prediction.shape))
+        # y_pred = np.argmax(prediction, axis=1)
+
         wild_examples['label_category'] = y_pred
         print('Done with model prediction for index: {}'.format(index__))
 

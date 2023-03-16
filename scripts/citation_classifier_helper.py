@@ -5,6 +5,39 @@ from itertools import chain
 from collections import Counter
 from sklearn.decomposition import PCA
 from sklearn.feature_extraction.text import CountVectorizer
+from keras_preprocessing.sequence import pad_sequences
+
+
+def embed_citation_text(text_features):
+    char_counts = pd.Series(Counter(chain.from_iterable(x for x in text_features.characters)))
+    # char_counts.to_csv(CHAR_COUNT, header=None)
+    # Make a dictionary for creating a mapping between the char and the corresponding index
+    char2ind = {char: i for i, char in enumerate(char_counts.index)}
+    # ind2char = {i: char for i, char in enumerate(char_counts.index)}
+
+    # Map each character into the citation to its corresponding index and store it in a list
+    X_char = []
+    for citation in text_features.citations:
+        citation_chars = []
+        for character in citation:
+            citation_chars.append(char2ind[character])
+        X_char.append(citation_chars)
+
+    # Since the median length of the citation is 282, we have padded the input till 400 to get extra information which
+    # would be fed into the character embedding neural network.
+    X_char = pad_sequences(X_char, maxlen=400)
+
+    # Append the citation character list with their corresponding lists for making a dataset
+    # for getting the character embeddings
+    data = []
+    for i in tqdm(range(len(X_char))):
+        if 'label_category' in text_features.columns:
+            data.append((X_char[i], int(text_features.iloc[i]['label_category'])))
+        else:
+            data.append((X_char[i]))
+
+    print("Final data dimensions: ", len(data), len(data[0]))
+    return data
 
 
 def make_structure_time_features(time_features):
@@ -149,6 +182,16 @@ def encode_sections(dataset, largest_sections):
     print('Auxiliary features after section generation: {}'.format(dataset.columns))
     return dataset
 
+
+def encode_citation_type(aux_features):
+    # Get one hot encoding of citation_type column
+    if 'citation_type' in aux_features:
+        citation_type_encoding = pd.get_dummies(aux_features['citation_type'])
+        # Drop column citation_type as it is now encoded and join it
+        aux_features = aux_features.drop('citation_type', axis=1)
+        # Concat columns of the dummies along the axis with the matching index
+        aux_features = pd.concat([aux_features, citation_type_encoding], axis=1)
+    return aux_features
 
 def encode_citation_tag_features(dataset):
     # Taking the `neighboring_tags` and making an encoder dictionary for it

@@ -12,17 +12,16 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, accuracy_score
 import keras
 from keras.models import Model, load_model
-from keras_preprocessing.sequence import pad_sequences
 from keras.layers import Input, Embedding, LSTM, Dense, Bidirectional
 from keras.utils import to_categorical
 from keras.optimizers import Adam
-import tensorflow as tf
+
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 
 from citation_classifier_helper import prepare_citation_word_features, encode_sections, \
     join_auxiliary_with_text, encode_citation_tag_features, prepare_time_features, \
-    prepare_citation_embedding, encode_auxuliary
+    prepare_citation_embedding, encode_auxuliary, encode_citation_type, embed_citation_text
 
 
 ext = "en_"
@@ -89,8 +88,8 @@ def prepare_labelled_dataset():
         newspaper_data['citations'] = newspaper_data['citations'].progress_apply(
             lambda x: re.sub(label + '\s{0,10}=\s{0,10}([^|]+)', label + ' = ', x))
 
-    # NK TODO take sample for huge datasets?
-    # newspaper_data = newspaper_data.sample(n=n)
+    # NK take sample for huge datasets
+    # newspaper_data = newspaper_data.sample(n=1000000)
 
     newspaper_data.drop('type_of_citation', axis=1, inplace=True)
     book_journal_features.drop('type_of_citation', axis=1, inplace=True)
@@ -103,10 +102,11 @@ def prepare_labelled_dataset():
     le = preprocessing.LabelEncoder()
     le.fit(dataset_with_features['actual_label'])
     dataset_with_features['label_category'] = le.transform(dataset_with_features['actual_label'])
-    # dataset_with_features[dataset_with_features['actual_label'] == 'entertainment'].head(1)
-    dataset_with_features[dataset_with_features['actual_label'] == 'web'].head(1)
-    dataset_with_features[dataset_with_features['actual_label'] == 'book'].head(1)
-    dataset_with_features[dataset_with_features['actual_label'] == 'journal'].head(1)
+
+    print("WEB:", dataset_with_features[dataset_with_features['actual_label'] == 'web'].head(1))
+    print("BOOK:", dataset_with_features[dataset_with_features['actual_label'] == 'book'].head(1))
+    print("JOURNAL:", dataset_with_features[dataset_with_features['actual_label'] == 'journal'].head(1))
+
     # Clearing up memory
     del book_journal_features
     del newspaper_data
@@ -115,64 +115,6 @@ def prepare_labelled_dataset():
     dataset_with_features = dataset_with_features.reset_index(drop=True)
     print("Final labelled dataset dimensions: ", dataset_with_features.shape)
     return dataset_with_features
-
-
-def encode_citation_type(aux_features):
-    # Get one hot encoding of citation_type column
-    if 'citation_type' in aux_features:
-        citation_type_encoding = pd.get_dummies(aux_features['citation_type'])
-        # Drop column citation_type as it is now encoded and join it
-        aux_features = aux_features.drop('citation_type', axis=1)
-        # Concat columns of the dummies along the axis with the matching index
-        aux_features = pd.concat([aux_features, citation_type_encoding], axis=1)
-
-    # print('Total mean length of entertainment articles: {}'.format(
-    #     aux_features[aux_features['label_category'] == 1]['total_words'].mean()))
-    # print('Total median length of entertainment articles: {}'.format(
-    #     aux_features[aux_features['label_category'] == 1]['total_words'].median()))
-    #
-    # print('Total mean length of journal articles: {}'.format(
-    #     aux_features[aux_features['label_category'] == 2]['total_words'].mean()))
-    # print('Total median length of journal articles: {}'.format(
-    #     aux_features[aux_features['label_category'] == 2]['total_words'].median()))
-    #
-    # print('Total mean length of book articles: {}'.format( # Books - length is less
-    #     aux_features[aux_features['label_category'] == 0]['total_words'].mean()))
-    # print('Total median length of book articles: {}'.format(
-    #     aux_features[aux_features['label_category'] == 0]['total_words'].median()))
-
-    return aux_features
-
-
-# NK TODO reuse for classifier based on citation text alone
-def prepare_data(text_features):
-    char_counts = pd.Series(Counter(chain.from_iterable(x for x in text_features.characters)))
-    # char_counts.to_csv(CHAR_COUNT, header=None)
-    # Make a dictionary for creating a mapping between the char and the corresponding index
-    char2ind = {char: i for i, char in enumerate(char_counts.index)}
-    # ind2char = {i: char for i, char in enumerate(char_counts.index)}
-
-    # Map each character into the citation to its corresponding index and store it in a list
-    X_char = []
-    for citation in text_features.citations:
-        citation_chars = []
-        for character in citation:
-            citation_chars.append(char2ind[character])
-        X_char.append(citation_chars)
-
-    # Since the median length of the citation is 282, we have padded the input till 400 to get extra information which
-    # would be fed into the character embedding neural network.
-    X_char = pad_sequences(X_char, maxlen=400)
-
-    # Append the citation character list with their corresponding lists for making a dataset
-    # for getting the character embeddings
-    data = []
-    for i in tqdm(range(len(X_char))):
-        data.append((X_char[i], int(text_features.iloc[i]['label_category'])))
-
-    print("Final data dimensions: ", len(data), len(data[0]))
-    return data
-
 
 def prepare_time_sequence_features(tag_features, word_features, data):
     # Join time sequence features with the citations dataset
@@ -315,26 +257,28 @@ def train_model(data):
     categorical_labels = to_categorical(training_labels, num_classes=3)
     # categorical_test_labels = to_categorical(testing_labels, num_classes=3)
 
-    print("Input dimension?", len(training_data[0])) #
     # Instantiate the model and generate the summary
-    model = citation_embedding_model(312)
+    model = load_model(EMBEDDING_MODEL)
 
-    # NK The argument steps_per_epoch should be equal to the total number of samples (length of your training set)
-    # divided by batch_size
-    BATCH_SIZE = 8
-    steps = len(training_data) #
-    print("Steps per epoch: ", steps)
-    # Run the model with the data being generated by the generator with a batch size of 64
-    # and number of epochs to be set to 15
-    # hist = model.fit_generator(generator(training_data, categorical_labels, 512), steps_per_epoch=4000, epochs=2)
-    model.fit_generator(generator(training_data, categorical_labels, BATCH_SIZE), steps_per_epoch=steps, epochs=2)
+    # model = citation_embedding_model(312)
+    #
+    # # NK The argument steps_per_epoch should be equal to the total number of samples (length of your training set)
+    # # divided by batch_size
+    # BATCH_SIZE = 8
+    # steps = len(training_data) #
+    # print("Steps per epoch: ", steps)
+    # # Run the model with the data being generated by the generator with a batch size of 64
+    # # and number of epochs to be set to 15
+    # # hist = model.fit_generator(generator(training_data, categorical_labels, 512), steps_per_epoch=4000, epochs=2)
+    # model.fit_generator(generator(training_data, categorical_labels, BATCH_SIZE), steps_per_epoch=steps, epochs=2)
 
     # Evaluation of embedding model
     print("Testing data shape:", np.array(testing_data).shape)
 
     y_predicted_proba = model.predict(np.array(testing_data))
     predicted_class = np.argmax(y_predicted_proba, axis=1)
-    accuracy_score(testing_labels, predicted_class)
+    accuracy = accuracy_score(testing_labels, predicted_class)
+    print("Accuracy of the embedding model: {}".format(accuracy))
 
     # Save the model so that we can retrieve it later
     model.save(EMBEDDING_MODEL)
@@ -384,7 +328,7 @@ def train_classification_model(tags_count, auxiliary, time_pca, label_categories
 
     # EPOCHS = 30
     # NK for faster testing
-    EPOCHS = 3
+    EPOCHS = 10
 
     x_train_indices, x_test_indices, y_train_indices, y_test_indices = train_test_split(
         range(auxiliary.shape[0]), range(y.shape[0]), train_size=0.9, stratify=y, shuffle=True
@@ -400,27 +344,27 @@ def train_classification_model(tags_count, auxiliary, time_pca, label_categories
 
     print("time_train", time_train.shape)
 
-    # BATCH_SIZE = 256
-    BATCH_SIZE = 8
+    BATCH_SIZE = 256
+    # BATCH_SIZE = 8
     print('Running model with epochs: {}'.format(EPOCHS))
 
     # NK reuse model for quick testing
-    # model = load_model(MODEL_CITATION_EPOCHS_H5.format(EPOCHS))
+    model = load_model(MODEL_CITATION_EPOCHS_H5.format(EPOCHS))
 
-    model = classification_model(tags_count, aux_train.shape[1])
-    training_generator = generator_nn(aux_train, time_train, y_train, BATCH_SIZE)
-    steps = len(x_train_indices)
-
-    callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
-    history_callback = model.fit_generator(
-        training_generator, steps_per_epoch=steps, epochs=EPOCHS, verbose=1, shuffle=True, callbacks=[callback]
-    )
-
-    history_dict = history_callback.history
-
-    f = open(MODEL_CITATION_LOSS.format(EPOCHS), 'w')
-    f.write(str(history_dict))
-    f.close()
+    # model = classification_model(tags_count, aux_train.shape[1])
+    # training_generator = generator_nn(aux_train, time_train, y_train, BATCH_SIZE)
+    # steps = len(x_train_indices)
+    #
+    # callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
+    # history_callback = model.fit_generator(
+    #     training_generator, steps_per_epoch=steps, epochs=EPOCHS, verbose=1, shuffle=True, callbacks=[callback]
+    # )
+    #
+    # history_dict = history_callback.history
+    #
+    # f = open(MODEL_CITATION_LOSS.format(EPOCHS), 'w')
+    # f.write(str(history_dict))
+    # f.close()
 
     prediction_for_folds = model.predict([time_test, aux_test])
 
@@ -440,6 +384,31 @@ def train_classification_model(tags_count, auxiliary, time_pca, label_categories
     with open(MODEL_CITATION_EPOCHS_JSON.format(EPOCHS), "w") as json_file:
         json_file.write(json_string)
     model.save(MODEL_CITATION_EPOCHS_H5.format(EPOCHS))
+
+
+def print_stats(aux_features, text_features):
+    print('Total mean length of book articles: {}'.format( # Books - length is less
+        aux_features[aux_features['label_category'] == 0]['total_words'].mean()))
+    print('Total median length of book articles: {}'.format(
+        aux_features[aux_features['label_category'] == 0]['total_words'].median()))
+
+    print('Total mean length of journal articles: {}'.format(
+        aux_features[aux_features['label_category'] == 1]['total_words'].mean()))
+    print('Total median length of journal articles: {}'.format(
+        aux_features[aux_features['label_category'] == 1]['total_words'].median()))
+
+    print('Total mean length of news articles: {}'.format(
+        aux_features[aux_features['label_category'] == 2]['total_words'].mean()))
+    print('Total median length of news articles: {}'.format(
+        aux_features[aux_features['label_category'] == 2]['total_words'].median()))
+
+    # Get the character counts for each unique character
+    print('The max length of the longest citation in terms of characters is: {}'.format(
+        max(text_features.characters.apply(lambda x: len(x)))))
+    print('The mean length of the longest citation in terms of characters is: {}'.format(
+        text_features.characters.apply(lambda x: len(x)).mean()))
+    print('The median length of the longest citation in terms of characters is: {}'.format(
+        text_features.characters.apply(lambda x: len(x)).median()))
 
 
 # MAIN
@@ -479,19 +448,11 @@ if __name__ == '__main__':
     # Convert the citation into a list by breaking it down into characters
     citation_text_features['characters'] = citation_text_features['citations'].progress_apply(lambda x: list(x))
 
-    # Get the character counts for each unique character
-    # print('The max length of the longest citation in terms of characters is: {}'.format(
-    #     max(citation_text_features.characters.apply(lambda x: len(x)))))
-    # print('The mean length of the longest citation in terms of characters is: {}'.format(
-    #     citation_text_features.characters.apply(lambda x: len(x)).mean()))
-    # print('The median length of the longest citation in terms of characters is: {}'.format(
-    #     citation_text_features.characters.apply(lambda x: len(x)).median()))
+    print_stats(auxiliary_features, citation_text_features)
 
-    data = prepare_data(citation_text_features)
+    data = embed_citation_text(citation_text_features)
 
-    # model = train_model(data)
-
-    model = load_model(EMBEDDING_MODEL)
+    model = train_model(data)
     citation_text_features = prepare_citation_embedding(citation_text_features, model)
 
     # This is optional, just to see a plot
@@ -510,9 +471,6 @@ if __name__ == '__main__':
     )
 
     time_pca, tags_count = prepare_time_features(time_sequence_features, ['id', 'citations', 'label_category', 'neighboring_words'])
-
-    print("Input data (time): ", len(time_pca[100]))
-    print("Input data (aux): ", len(np.array(auxiliary)[100]))
 
     label_categories = auxiliary_features.loc[:, 'label_category'].astype(int).tolist()
     train_classification_model(tags_count, auxiliary, time_pca, label_categories)
