@@ -103,8 +103,8 @@ def prepare_labelled_dataset():
     le.fit(dataset_with_features['actual_label'])
     dataset_with_features['label_category'] = le.transform(dataset_with_features['actual_label'])
 
-    print("WEB:", dataset_with_features[dataset_with_features['actual_label'] == 'web'].head(1))
     print("BOOK:", dataset_with_features[dataset_with_features['actual_label'] == 'book'].head(1))
+    print("WEB:", dataset_with_features[dataset_with_features['actual_label'] == 'web'].head(1))
     print("JOURNAL:", dataset_with_features[dataset_with_features['actual_label'] == 'journal'].head(1))
 
     # Clearing up memory
@@ -115,6 +115,7 @@ def prepare_labelled_dataset():
     dataset_with_features = dataset_with_features.reset_index(drop=True)
     print("Final labelled dataset dimensions: ", dataset_with_features.shape)
     return dataset_with_features
+
 
 def prepare_time_sequence_features(tag_features, word_features, data):
     # Join time sequence features with the citations dataset
@@ -328,7 +329,7 @@ def train_classification_model(tags_count, auxiliary, time_pca, label_categories
 
     # EPOCHS = 30
     # NK for faster testing
-    EPOCHS = 10
+    EPOCHS = 3
 
     x_train_indices, x_test_indices, y_train_indices, y_test_indices = train_test_split(
         range(auxiliary.shape[0]), range(y.shape[0]), train_size=0.9, stratify=y, shuffle=True
@@ -348,23 +349,23 @@ def train_classification_model(tags_count, auxiliary, time_pca, label_categories
     # BATCH_SIZE = 8
     print('Running model with epochs: {}'.format(EPOCHS))
 
-    # NK reuse model for quick testing
-    model = load_model(MODEL_CITATION_EPOCHS_H5.format(EPOCHS))
+    # Reuse model for quick testing
+    # model = load_model(MODEL_CITATION_EPOCHS_H5.format(EPOCHS))
 
-    # model = classification_model(tags_count, aux_train.shape[1])
-    # training_generator = generator_nn(aux_train, time_train, y_train, BATCH_SIZE)
-    # steps = len(x_train_indices)
-    #
-    # callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
-    # history_callback = model.fit_generator(
-    #     training_generator, steps_per_epoch=steps, epochs=EPOCHS, verbose=1, shuffle=True, callbacks=[callback]
-    # )
-    #
-    # history_dict = history_callback.history
-    #
-    # f = open(MODEL_CITATION_LOSS.format(EPOCHS), 'w')
-    # f.write(str(history_dict))
-    # f.close()
+    model = classification_model(tags_count, aux_train.shape[1])
+    training_generator = generator_nn(aux_train, time_train, y_train, BATCH_SIZE)
+    steps = len(x_train_indices)
+
+    callback = tf.keras.callbacks.LearningRateScheduler(scheduler)
+    history_callback = model.fit_generator(
+        training_generator, steps_per_epoch=steps, epochs=EPOCHS, verbose=1, shuffle=True, callbacks=[callback]
+    )
+
+    history_dict = history_callback.history
+
+    f = open(MODEL_CITATION_LOSS.format(EPOCHS), 'w')
+    f.write(str(history_dict))
+    f.close()
 
     prediction_for_folds = model.predict([time_test, aux_test])
 

@@ -21,8 +21,9 @@ np.random.seed(0)
 
 def update_ids(x):
     kinds_of_ids = set()
-    for item in x:
-        kinds_of_ids.add(item[0])
+    for rec in x:
+        for item in rec:
+            kinds_of_ids.add(item.split(":")[0].replace("'",""))
     return kinds_of_ids
 
 
@@ -86,16 +87,23 @@ def predict_citations(PROJECT_HOME, ext):
         id_list_str = list(
             item.split('=')
             for item in row[0].replace('{','').replace('}','').replace(' ', '').split(','))
-        if len([i for i in ['PMC', 'PMID'] if i in update_ids(id_list_str)]) > 0:
+
+        ids = update_ids(id_list_str)
+        print(ids)
+        print("len([i for i in ['PMC', 'PMID'] if i in ids ])", len([i for i in ['PMC', 'PMID'] if i in ids ]))
+        print("len([i for i in ['DOI'] if i in ids])", len([i for i in ['DOI'] if i in ids]))
+
+        if len([i for i in ['PMC', 'PMID'] if i in ids ]) > 0:
             return 'journal'
-        elif len([i for i in ['DOI'] if i in update_ids(id_list_str)]) == 1:
-            if (len([i for i in ['DOI', 'ISBN'] if i in update_ids(id_list_str)]) == 2) and ('cite journal' in row[2]) and ('cite conference' in row[2]):
+
+        elif len([i for i in ['DOI'] if i in ids]) == 1:
+            if (len([i for i in ['DOI', 'ISBN'] if i in ids]) == 2) and ('cite journal' in row[2]) and ('cite conference' in row[2]):
                 return 'journal'
-            elif (len([i for i in ['ISBN', 'DOI'] if i in update_ids(id_list_str)]) == 2) and ('cite book' in row[2]) and ('cite encyclopedia' in row[2]):
+            elif (len([i for i in ['ISBN', 'DOI'] if i in ids]) == 2) and ('cite book' in row[2]) and ('cite encyclopedia' in row[2]):
                 return 'book'
             else:
                 return 'journal'
-        elif len([i for i in ['ISBN'] if i in update_ids(id_list_str)]) == 1:
+        elif len([i for i in ['ISBN'] if i in ids]) == 1:
             return 'book'
         else:
             return 'NO LABEL'
@@ -111,13 +119,16 @@ def predict_citations(PROJECT_HOME, ext):
         all_examples = pd.read_parquet(f_name_path, engine='pyarrow')
 
         # TODO NK Remove - 350k are enough to get all 35 tags present
-        all_examples = all_examples.head(350000)
-        # all_examples = all_examples.head(10000)
+        # all_examples = all_examples.head(350000)
+        all_examples = all_examples.head(1000)
 
         print('Doing filename: {} with citations: {}'.format(f_name, all_examples.shape[0]))
         all_examples['real_citation_text'] = all_examples['citations']
         all_examples['needs_a_label'] = all_examples[['ID_list', 'citations', 'type_of_citation']].progress_apply(
             lambda x: needs_a_label_or_not(x), axis=1)
+
+        print(all_examples['needs_a_label'].head(100))
+
         not_wild_examples = all_examples[all_examples['needs_a_label'] != 'NO LABEL'].reset_index(drop=True)
         wild_examples = all_examples[all_examples['needs_a_label'] == 'NO LABEL'].reset_index(drop=True)
         print('Preprocessing the citations for wild examples')
@@ -197,4 +208,6 @@ def predict_citations(PROJECT_HOME, ext):
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 ext = "en_"
 
-predict_citations(PROJECT_HOME, ext)
+# MAIN
+if __name__ == '__main__':
+    predict_citations(PROJECT_HOME, ext)

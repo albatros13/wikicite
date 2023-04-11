@@ -1,34 +1,35 @@
 from pyspark.sql.functions import explode, col, split, trim, lower, regexp_replace, expr, udf, lit
 from pyspark.sql.types import Row, StructType, StructField, ArrayType, StringType, BooleanType
-import mwparserfromhell
 from pyspark import SparkContext, SQLContext, SparkConf
 import os
 import sys
 import findspark
 import re
 from nltk import pos_tag
+import mwparserfromhell
 from wikiciteparser.parser import parse_citation_template
 import tldextract
+from google.cloud import storage
 
 
-os.environ["PYSPARK_SUBMIT_ARGS"] = " --packages com.databricks:spark-xml_2.12:0.15.0 pyspark-shell"
+os.environ["PYSPARK_SUBMIT_ARGS"] = " --packages com.databricks:spark-xml_2.12:0.16.0 pyspark-shell"
 findspark.init()
 
 os.environ['PYSPARK_PYTHON'] = sys.executable
 os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
 
-conf = SparkConf().setAll([
-    ('spark.executor.memory', '8g'),
-    ('spark.executor.cores', '4'),
-    ('spark.num.executors', '20'),
-    ('spark.cores.max', '4'),
-    ('spark.driver.memory','16g'),
-    ('spark.executorEnv.PYTHON_EGG_CACHE', "./.python-eggs/"),
-    ('spark.executorEnv.PYTHON_EGG_DIR', "./.python-eggs/"),
-    ('spark.driverEnv.PYTHON_EGG_CACHE', "./.python-eggs/"),
-    ('spark.driverEnv.PYTHON_EGG_DIR', "./.python-eggs/")
-])
-sc = SparkContext(conf=conf).getOrCreate()
+# conf = SparkConf().setAll([
+#     ('spark.executor.memory', '8g'),
+#     ('spark.executor.cores', '4'),
+#     ('spark.num.executors', '20'),
+#     ('spark.cores.max', '4'),
+#     ('spark.driver.memory','16g'),
+#     ('spark.executorEnv.PYTHON_EGG_CACHE', "./.python-eggs/"),
+#     ('spark.executorEnv.PYTHON_EGG_DIR', "./.python-eggs/"),
+#     ('spark.driverEnv.PYTHON_EGG_CACHE', "./.python-eggs/"),
+#     ('spark.driverEnv.PYTHON_EGG_DIR', "./.python-eggs/")
+# ])
+sc = SparkContext().getOrCreate()
 sql_context = SQLContext(sc)
 
 # import nltk
@@ -220,7 +221,7 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
     def get_generic_template(citation):
         """
             Get generic template of a citation using the wikiciteparser library.
-            :param: citation - according to a particular format as described in const.py
+            :param: citation - according to a particular format as described in CITATION_TEMPLATES
         """
         not_parsable = {'Title': 'Citation generic template not possible'}
         if not check_if_balanced(citation):
@@ -519,31 +520,60 @@ def get_selected_features(file_in1, file_in2, file_out):
 
 # Files
 PROJECT_HOME = "gs://wikicite-1/"
-# PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
-ext = "en_full_"
-INPUT_DATA = PROJECT_HOME + 'data/dumps/enwiki-20230220-pages-articles.xml.bz2'
-# ext = "xh_"
-# INPUT_DATA = PROJECT_HOME + 'data/dumps/xhwiki-20221001-pages-articles-multistream.xml.bz2'
+ext = "en_"
 
-CITATIONS = PROJECT_HOME + 'data/content/{}citations.parquet'.format(ext)
-CITATIONS_CONTENT = PROJECT_HOME + 'data/content/{}citations_content.parquet'.format(ext)
-BASE_FEATURES = PROJECT_HOME + 'data/features/{}base_features_complete.parquet'.format(ext)
-CITATIONS_SEPARATED = PROJECT_HOME + 'data/content/{}citations_separated.parquet'.format(ext)
-CITATIONS_FEATURES = PROJECT_HOME + 'data/features/{}citations_features.parquet'.format(ext)
-CITATIONS_FEATURES_IDS = PROJECT_HOME + 'data/features/{}citations_features_ids.parquet'.format(ext)
-BOOK_JOURNAL_CITATIONS = PROJECT_HOME + 'data/features/{}book_journal_citations.parquet'.format(ext)
-NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/{}newspaper_citations.parquet'.format(ext)
-NEWSPAPER_FEATURES = PROJECT_HOME + 'data/features/{}newspaper_citation_features.parquet'.format(ext)
+INPUT_DIR = "data/dumps/parts"
+OUTPUT_DIR = 'data/content/parts/'
+CONTENT_DIR = OUTPUT_DIR + 'content/'
+BASE_DIR = OUTPUT_DIR + 'base/'
+SEPARATED_DIR = OUTPUT_DIR + 'separated/'
+FEATURE_DIR = OUTPUT_DIR + 'features/'
+BOOK_JOURNAL_DIR = OUTPUT_DIR + 'book_journal/'
+NEWS_DIR = OUTPUT_DIR + 'news/'
+NEWS_FEATURE_DIR = OUTPUT_DIR + 'news/features/'
 
-# Data extraction steps
-# get_data(INPUT_DATA, CITATIONS)
-get_content(INPUT_DATA, CITATIONS_CONTENT)
-extract_nlp_features(CITATIONS_CONTENT, BASE_FEATURES)
-get_generic_tmpl(CITATIONS, CITATIONS_SEPARATED)
-get_dataset_features(BASE_FEATURES, CITATIONS_SEPARATED, CITATIONS_FEATURES)
 
-# Labelled datasets for classifier training
-filter_with_ids(CITATIONS_FEATURES, CITATIONS_FEATURES_IDS)
-get_book_journal_features(CITATIONS_FEATURES_IDS, BOOK_JOURNAL_CITATIONS)
-get_newspaper_citations(CITATIONS_SEPARATED, NEWSPAPER_CITATIONS)
-get_selected_features(BASE_FEATURES, NEWSPAPER_CITATIONS, NEWSPAPER_FEATURES)
+BUCKET_NAME = os.getenv("BUCKET_NAME", "wikicite-1")
+BUCKET_PATH = os.getenv("BUCKET_PATH", INPUT_DIR)
+
+storage_client = storage.Client()
+bucket = storage_client.bucket(BUCKET_NAME)
+content_list = list(bucket.list_blobs(prefix=f"{BUCKET_PATH}/"))
+
+for index__, b in enumerate(content_list):
+    if b.name.endswith('.bz2'):
+        idx1 = b.name.rfind('-a')
+        idx2 = b.name.rfind('.')
+        suffix = b.name[idx1: idx2]
+        f_in = PROJECT_HOME + b.name
+        f_citations = PROJECT_HOME + OUTPUT_DIR + ext + 'citations' + suffix + '.parquet'
+        print("INPUT FILE: ", f_in, " OUTPUT FILE:", f_citations)
+
+        # get_data(f_in, f_citations)
+
+        f_content = PROJECT_HOME + CONTENT_DIR + ext + 'citations_content' + suffix + '.parquet'
+        # get_content(f_in, f_content)
+
+        f_base = PROJECT_HOME + BASE_DIR + ext + 'base_features' + suffix + '.parquet'
+        # extract_nlp_features(f_content, f_base)
+
+        f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
+        get_generic_tmpl(f_citations, f_separated)
+
+        # f_features = PROJECT_HOME + FEATURE_DIR + ext + 'citations_features' + suffix + '.parquet'
+        # get_dataset_features(f_base, f_separated, f_features)
+
+        # f_feature_ids = PROJECT_HOME + FEATURE_DIR + ext + 'citations_features_ids' + suffix + '.parquet'
+        # filter_with_ids(f_features, f_feature_ids)
+
+        # get_dataset_features(f_base, f_separated, f_features)
+
+        # Labelled datasets for classifier training
+
+        # f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
+        # f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
+        # f_news_features = PROJECT_HOME + NEWS_FEATURE_DIR + ext + 'news_citation_features' + suffix + '.parquet'
+        #
+        # get_book_journal_features(f_feature_ids, f_book_journal)
+        # get_newspaper_citations(f_separated, f_news)
+        # get_selected_features(f_base, f_citations, f_news_features)

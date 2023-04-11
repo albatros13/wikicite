@@ -36,5 +36,5 @@ FASTTEXT_MODEL = '/data/model/{}wiki_fasttext.txt'.format(ext)
 if __name__ == '__main__':
     # Train FastText model before calling classifier
     train_fasttext_model(INPUT_DATA, FASTTEXT_MODEL, ext[0:2])
-    # (?) DOWNLOAD PRETRAINED MODEL FROM: https://wikipedia2vec.github.io/wikipedia2vec/pretrained/
+
 
