@@ -1,4 +1,3 @@
-import re
 import os
 import numpy as np
 import pandas as pd
@@ -9,7 +8,7 @@ from keras.models import load_model
 from gensim.models import FastText
 from citation_classifier_helper import prepare_time_features, prepare_citation_word_features, \
     encode_sections, encode_citation_tag_features, join_auxiliary_with_text, \
-    prepare_citation_embedding, encode_auxuliary, encode_citation_type, embed_citation_text
+    prepare_citation_embedding, encode_auxuliary, encode_citation_type, embed_citation_text, clear_bias
 
 
 import warnings
@@ -63,7 +62,7 @@ def predict_citations(PROJECT_HOME, ext):
     largest_sections = pd.read_csv(LARGEST_SECTIONS, header=None)
     largest_sections.rename({0: 'section_name', 1: 'count'}, axis=1, inplace=True)
 
-    EPOCHS = 10
+    EPOCHS = 3
     # Load the pretrained embedding model on wikipedia
     model_fasttext = FastText.load(FASTTEXT_MODEL)
     model_embedding = load_model(MODEL_EMBEDDEDING)
@@ -89,9 +88,9 @@ def predict_citations(PROJECT_HOME, ext):
             for item in row[0].replace('{','').replace('}','').replace(' ', '').split(','))
 
         ids = update_ids(id_list_str)
-        print(ids)
-        print("len([i for i in ['PMC', 'PMID'] if i in ids ])", len([i for i in ['PMC', 'PMID'] if i in ids ]))
-        print("len([i for i in ['DOI'] if i in ids])", len([i for i in ['DOI'] if i in ids]))
+        # print(ids)
+        # print("len([i for i in ['PMC', 'PMID'] if i in ids ])", len([i for i in ['PMC', 'PMID'] if i in ids ]))
+        # print("len([i for i in ['DOI'] if i in ids])", len([i for i in ['DOI'] if i in ids]))
 
         if len([i for i in ['PMC', 'PMID'] if i in ids ]) > 0:
             return 'journal'
@@ -119,27 +118,24 @@ def predict_citations(PROJECT_HOME, ext):
         all_examples = pd.read_parquet(f_name_path, engine='pyarrow')
 
         # TODO NK Remove - 350k are enough to get all 35 tags present
-        # all_examples = all_examples.head(350000)
-        all_examples = all_examples.head(1000)
+        all_examples = all_examples.head(350000)
+        # all_examples = all_examples.head(1000)
 
         print('Doing filename: {} with citations: {}'.format(f_name, all_examples.shape[0]))
         all_examples['real_citation_text'] = all_examples['citations']
         all_examples['needs_a_label'] = all_examples[['ID_list', 'citations', 'type_of_citation']].progress_apply(
             lambda x: needs_a_label_or_not(x), axis=1)
 
-        print(all_examples['needs_a_label'].head(100))
+        # print(all_examples['needs_a_label'].head(100))
 
         not_wild_examples = all_examples[all_examples['needs_a_label'] != 'NO LABEL'].reset_index(drop=True)
-        wild_examples = all_examples[all_examples['needs_a_label'] == 'NO LABEL'].reset_index(drop=True)
+        # wild_examples = all_examples[all_examples['needs_a_label'] == 'NO LABEL'].reset_index(drop=True)
+        wild_examples = all_examples
         print('Preprocessing the citations for wild examples')
         print(all_examples.shape, wild_examples.shape, not_wild_examples.shape)
 
-        # Remove the biases
-        labels = ['doi', 'isbn', 'pmc', 'pmid', 'url', 'work', 'newspaper', 'website']
+        clear_bias(wild_examples)
 
-        for label in labels:
-            wild_examples['citations'] = wild_examples['citations'].apply(
-                lambda x: re.sub(label + '\s{0,10}=\s{0,10}([^|]+)', label + ' = ', x))
         print('Number of wild citations in this file: {}'.format(wild_examples.shape))
 
         print('Any sections in the parent section: {}'.format(
@@ -176,13 +172,10 @@ def predict_citations(PROJECT_HOME, ext):
         # auxiliary = encode_auxuliary(auxiliary_features)
         #
         # time_sequence_features = prepare_time_sequence_features(citation_tag_features, citation_word_features)
-        #
         # time_pca, tags_count = prepare_time_features(time_sequence_features, ['citations', 'neighboring_words'])
         #
         # # Classify citations
-        #
         # print('Features for model constructed.. now running model')
-        #
         # # RUN MODEL
         #
         # prediction = model.predict([time_pca, auxiliary])
@@ -194,13 +187,15 @@ def predict_citations(PROJECT_HOME, ext):
 
         # Result saved
         not_wild_examples['label_category'] = None
-        columns = ['id', 'page_title', 'real_citation_text', 'ID_list', 'type_of_citation', 'label_category', 'needs_a_label']
-        resultant_examples = pd.concat([wild_examples[columns], not_wild_examples[columns]]).reset_index(drop=True)
-        resultant_examples.rename({'label_category': 'predicted_label_no', 'needs_a_label': 'existing_label', 'real_citation_text': 'citations'}, axis=1, inplace=True)
-        print('Saving a file with f_name: {} with citations: {} with all:{} and wild: {} and non-wild: {}'.format(
-            f_name, resultant_examples.shape[0], all_examples.shape[0], wild_examples.shape[0], not_wild_examples.shape[0]))
+        # columns = ['id', 'page_title', 'real_citation_text', 'ID_list', 'type_of_citation', 'label_category', 'needs_a_label']
+        # resultant_examples = pd.concat([wild_examples[columns], not_wild_examples[columns]]).reset_index(drop=True)
+        # resultant_examples.rename({'label_category': 'predicted_label_no', 'needs_a_label': 'existing_label', 'real_citation_text': 'citations'}, axis=1, inplace=True)
 
-        resultant_examples.to_csv(RESULT_FILE.format(index__), index=False, encoding='utf-8')
+        # print('Saving a file with f_name: {} with citations: {} with all:{} and wild: {} and non-wild: {}'.format(
+        #     f_name, resultant_examples.shape[0], all_examples.shape[0], wild_examples.shape[0], not_wild_examples.shape[0]))
+
+        wild_examples.to_csv(RESULT_FILE.format(index__), index=False, encoding='utf-8')
+        # resultant_examples.to_csv(RESULT_FILE.format(index__), index=False, encoding='utf-8')
         print('\nFile saved for part: {}\n\n'.format(index__))
 
 

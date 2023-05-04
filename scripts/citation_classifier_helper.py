@@ -6,6 +6,25 @@ from collections import Counter
 from sklearn.decomposition import PCA
 from sklearn.feature_extraction.text import CountVectorizer
 from keras_preprocessing.sequence import pad_sequences
+import re
+
+
+def clear_bias(data, no_id_fraction=0):
+    labels = ['doi', 'isbn', 'pmc', 'pmid', 'url', 'news']
+    for label in labels:
+        data['citations'] = data['citations'].progress_apply(
+            lambda x: re.sub(label + '\s{0,10}=\s{0,10}([^|]+)', label + ' = ', x))
+    # For part of the training dataset, remove identifiers completely as the classifier should learn to recognise
+    # journals and books without doi, isbn, and other identifiers
+    if no_id_fraction > 0:
+        n = int(no_id_fraction * data.shape[0])
+        no_id_data = data.sample(n=n)
+        print('Number of citations with cleared identifiers: {}'.format(n))
+        for label in labels:
+            no_id_data['citations'] = no_id_data['citations'].progress_apply(
+                lambda x: re.sub(label + ' = ', '', x))
+        data.update(no_id_data)
+    data.drop('type_of_citation', axis=1, inplace=True)
 
 
 def embed_citation_text(text_features):
@@ -192,6 +211,7 @@ def encode_citation_type(aux_features):
         # Concat columns of the dummies along the axis with the matching index
         aux_features = pd.concat([aux_features, citation_type_encoding], axis=1)
     return aux_features
+
 
 def encode_citation_tag_features(dataset):
     # Taking the `neighboring_tags` and making an encoder dictionary for it

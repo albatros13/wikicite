@@ -1,9 +1,10 @@
-import re
+import os
 import gc
 import warnings
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import tensorflow as tf
 from itertools import chain
 from collections import Counter
 from gensim.models import FastText
@@ -21,27 +22,7 @@ from sklearn.manifold import TSNE
 
 from citation_classifier_helper import prepare_citation_word_features, encode_sections, \
     join_auxiliary_with_text, encode_citation_tag_features, prepare_time_features, \
-    prepare_citation_embedding, encode_auxuliary, encode_citation_type, embed_citation_text
-
-
-ext = "en_"
-PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
-
-BOOK_JOURNAL_CITATIONS = PROJECT_HOME + 'data/features/{}book_journal_citations.parquet'.format(ext)
-NEWSPAPER_CITATIONS = PROJECT_HOME + 'data/features/{}newspaper_citation_features.parquet'.format(ext)
-
-TAG_COUNT = PROJECT_HOME + 'data/features/{}tag_counts.csv'.format(ext)
-CHAR_COUNT = PROJECT_HOME + 'data/features/{}char_counts.csv'.format(ext)
-LARGEST_SECTIONS = PROJECT_HOME + 'data/features/{}largest_sections.csv'.format(ext)
-
-DATASET_WITH_FEATURES = PROJECT_HOME + 'data/features/{}dataset_with_features.csv'.format(ext)
-
-FASTTEXT_MODEL = '../data/model/{}wiki_fasttext.txt'.format(ext)
-EMBEDDING_MODEL = '../data/model/{}embedding_model.h5'.format(ext)
-MODEL_CITATION_LOSS = '../data/model/'+ext+'citation_model_loss_{}.json'
-MODEL_CITATION_RESULT = '../data/model/'+ext+'citation_model_result_{}.json'
-MODEL_CITATION_EPOCHS_H5 = '../data/model/'+ext+'citation_model_epochs_{}.h5'
-MODEL_CITATION_EPOCHS_JSON = '../data/model/'+ext+'citation_model_epochs_{}.json'
+    prepare_citation_embedding, encode_auxuliary, encode_citation_type, embed_citation_text, clear_bias
 
 gc.collect()
 warnings.filterwarnings("ignore")
@@ -50,71 +31,47 @@ keras.backend.backend()
 
 np.random.seed(0)
 
-# Get auxiliary features and divide them into labels
-# 1. `ref_index`
-# 2. `total_words`
-# 3. `tags`
-# 4. `type_of_citation`
+# Get auxiliary features and divide them into labels:
+# `ref_index`, `total_words`, `tags`, `type_of_citation`
 # Can include `section` of the page in which the citation belongs to
 
 
-def prepare_labelled_dataset():
-    # BOOKS AND JOURNALS
-    book_journal_features = pd.read_parquet(BOOK_JOURNAL_CITATIONS, engine='pyarrow')
-
-    labels = ['doi', 'isbn', 'pmc', 'pmid', 'url', 'work', 'newspaper', 'website']
-    for label in labels:
-        book_journal_features['citations'] = book_journal_features['citations'].progress_apply(
-            lambda x: re.sub(label + '\s{0,10}=\s{0,10}([^|]+)', label + ' = ', x))
-
-    book_journal_features['actual_label'].value_counts()
-
+def prepare_labelled_dataset(book_journal_file, newspaper_file):
+    book_journal_features = pd.read_parquet(book_journal_file, engine='pyarrow')
     journal_features = book_journal_features[book_journal_features['actual_label'] == 'journal']
     book_features = book_journal_features[book_journal_features['actual_label'] == 'book']
 
+    newspaper_features = pd.read_parquet(newspaper_file, engine='pyarrow')
+    newspaper_features = newspaper_features[['citations', 'ref_index', 'total_words', 'neighboring_words',
+                                     'neighboring_tags', 'id', 'sections', 'type_of_citation']]
+    newspaper_features['actual_label'] = 'news'
+    # NK take sample for huge datasets
+    # newspaper_features = newspaper_features.sample(n=1000000)
+
     print('The total number of journals: {}'.format(journal_features.shape))
     print('The total number of books: {}'.format(book_features.shape))
+    print('The total number of newspapers: {}'.format(newspaper_features.shape))
 
-    # NEWSPAPERS
+    clear_bias(journal_features, 1)
+    clear_bias(book_features, 1)
+    clear_bias(newspaper_features, 1)
 
-    newspaper_data = pd.read_parquet(NEWSPAPER_CITATIONS, engine='pyarrow')
-    print('The total number of newspapers: {}'.format(newspaper_data.shape))
+    # NK TODO add 'web' or 'other' samples
 
-    newspaper_data = newspaper_data[[
-        'citations', 'ref_index', 'total_words', 'neighboring_words', 'neighboring_tags', 'id', 'sections', 'type_of_citation'
-    ]]
-    newspaper_data['actual_label'] = 'web'
-    for label in labels:
-        newspaper_data['citations'] = newspaper_data['citations'].progress_apply(
-            lambda x: re.sub(label + '\s{0,10}=\s{0,10}([^|]+)', label + ' = ', x))
-
-    # NK take sample for huge datasets
-    # newspaper_data = newspaper_data.sample(n=1000000)
-
-    newspaper_data.drop('type_of_citation', axis=1, inplace=True)
-    book_journal_features.drop('type_of_citation', axis=1, inplace=True)
-
-    book_features.drop('type_of_citation', axis=1, inplace=True)
-    journal_features.drop('type_of_citation', axis=1, inplace=True)
-
-    dataset_with_features = pd.concat([journal_features, book_features, newspaper_data])
-
+    labelled_dataset = pd.concat([journal_features, book_features, newspaper_features])
     le = preprocessing.LabelEncoder()
-    le.fit(dataset_with_features['actual_label'])
-    dataset_with_features['label_category'] = le.transform(dataset_with_features['actual_label'])
+    le.fit(labelled_dataset['actual_label'])
+    labelled_dataset['label_category'] = le.transform(labelled_dataset['actual_label'])
 
-    print("BOOK:", dataset_with_features[dataset_with_features['actual_label'] == 'book'].head(1))
-    print("WEB:", dataset_with_features[dataset_with_features['actual_label'] == 'web'].head(1))
-    print("JOURNAL:", dataset_with_features[dataset_with_features['actual_label'] == 'journal'].head(1))
+    print("BOOK:", labelled_dataset[labelled_dataset['actual_label'] == 'book'].head(1))
+    print("NEWS:", labelled_dataset[labelled_dataset['actual_label'] == 'web'].head(1))
+    print("JOURNAL:", labelled_dataset[labelled_dataset['actual_label'] == 'journal'].head(1))
 
-    # Clearing up memory
-    del book_journal_features
-    del newspaper_data
     # Remove rows which have duplicate ID and citations since they are just the same examples
-    dataset_with_features = dataset_with_features.drop_duplicates(subset=['id', 'citations'])
-    dataset_with_features = dataset_with_features.reset_index(drop=True)
-    print("Final labelled dataset dimensions: ", dataset_with_features.shape)
-    return dataset_with_features
+    labelled_dataset = labelled_dataset.drop_duplicates(subset=['id', 'citations'])
+    labelled_dataset = labelled_dataset.reset_index(drop=True)
+    print("Final labelled dataset dimensions: ", labelled_dataset.shape)
+    return labelled_dataset
 
 
 def prepare_time_sequence_features(tag_features, word_features, data):
@@ -415,11 +372,37 @@ def print_stats(aux_features, text_features):
 # MAIN
 if __name__ == '__main__':
 
-    # dataset_with_features = prepare_labelled_dataset()
-    # dataset_with_features.to_csv(DATASET_WITH_FEATURES, index=False)
+    ext = "en_"
+    PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
+
+    OUTPUT_DIR       = 'data/content/parts/'
+    FEATURE_DIR      = OUTPUT_DIR + 'features/'
+    BOOK_JOURNAL_DIR = OUTPUT_DIR + 'book_journal/'
+    NEWS_DIR         = OUTPUT_DIR + 'news/'
+    NEWS_FEATURE_DIR = OUTPUT_DIR + 'news/features/'
+
+    MODEL_DIR        = '../data/model/'
+
+    FASTTEXT_MODEL             = MODEL_DIR + ext + 'wiki_fasttext.txt'
+    EMBEDDING_MODEL            = MODEL_DIR + ext + 'embedding_model.h5'
+    MODEL_CITATION_LOSS        = MODEL_DIR + ext + 'citation_model_loss_{}.json'
+    MODEL_CITATION_RESULT      = MODEL_DIR + ext + 'citation_model_result_{}.json'
+    MODEL_CITATION_EPOCHS_H5   = MODEL_DIR + ext + 'citation_model_epochs_{}.h5'
+    MODEL_CITATION_EPOCHS_JSON = MODEL_DIR + ext + 'citation_model_epochs_{}.json'
+
+    # FILES = os.listdir(PROJECT_HOME + FEATURE_DIR)
+
+    # Single file test
+    LARGEST_SECTIONS       = PROJECT_HOME + FEATURE_DIR + ext + 'largest_sections.csv'
+    DATASET_WITH_FEATURES  = PROJECT_HOME + FEATURE_DIR + ext + 'dataset_with_features.csv'
+    BOOK_JOURNAL_CITATIONS = PROJECT_HOME + FEATURE_DIR + ext + 'book_journal_citations.parquet'
+    NEWSPAPER_CITATIONS    = PROJECT_HOME + FEATURE_DIR + ext + 'newspaper_citation_features.parquet'
+
+    dataset_with_features = prepare_labelled_dataset(BOOK_JOURNAL_CITATIONS, NEWSPAPER_CITATIONS)
+    dataset_with_features.to_csv(DATASET_WITH_FEATURES, index=False)
 
     # re-load labelled dataset
-    dataset_with_features = pd.read_csv(DATASET_WITH_FEATURES)
+    # dataset_with_features = pd.read_csv(DATASET_WITH_FEATURES)
 
     # NK Convert strings to arrays
     for col in ['neighboring_tags', 'neighboring_words', 'sections']:

@@ -9,7 +9,7 @@ from nltk import pos_tag
 import mwparserfromhell
 from wikiciteparser.parser import parse_citation_template
 import tldextract
-# from google.cloud import storage
+from google.cloud import storage
 
 
 os.environ["PYSPARK_SUBMIT_ARGS"] = " --packages com.databricks:spark-xml_2.12:0.15.0 pyspark-shell"
@@ -45,7 +45,7 @@ CITATION_TEMPLATES = {'citation', 'cite arxiv', 'cite av media', 'cite av media 
                       'cite thesis', 'cite web'}
 
 
-def get_data(file_in, file_out, limit=None):
+def get_data(file_in, file_out):
     print("Step 1: Getting citations from XML dump...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
@@ -73,6 +73,8 @@ def get_data(file_in, file_out, limit=None):
             # NK String representation changed in Python 3
             if tpl.startswith('{{') or tpl.startswith("'{{"):
                 _tpl = repr(tpl)
+                # if _tpl.startswith("'{{") or _tpl.startswith('"{{'):
+                #     _tpl = _tpl[1:len(_tpl) - 1]
                 citations.append(_tpl)
                 sections.append(', '.join(section_features[_tpl]))
         return list(zip(citations, sections))
@@ -111,14 +113,11 @@ def get_data(file_in, file_out, limit=None):
     cite_df = cite_df.withColumn('type_of_citation', lower(trim(split_col.getItem(0))))
     cite_df = cite_df.withColumn('type_of_citation', regexp_replace('type_of_citation', '\{\{', ''))
 
-    if limit:
-        cite_df = cite_df.limit(limit)
-    print("Ready to save...")
-    print("Extracted rows: ", cite_df.count())
+    print("Extracted citations: ", cite_df.count())
     cite_df.write.mode('overwrite').parquet(file_out)
 
 
-def get_content(file_in, file_out, limit=None):
+def get_content(file_in, file_out):
     print("Step 2: Getting content from XML dump...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
@@ -129,9 +128,6 @@ def get_content(file_in, file_out, limit=None):
     # Get only ID, title, revision text's value which we are interested in
     pages = pages['id', 'title', 'revision.text']
     pages = pages.toDF('id', 'page_title', 'content')
-
-    if limit:
-        pages = pages.limit(limit)
     pages.write.mode('overwrite').parquet(file_out)
 
 
@@ -190,8 +186,7 @@ def extract_nlp_features(file_in, file_out):
     citations_content = sql_context.createDataFrame(citations_content.rdd.map(get_as_row))
     citations_content = citations_content.withColumn('citations_features', explode('citations_features'))
     citations_content.write.mode('overwrite').parquet(file_out)
-    sql_context.clearCache()
-
+    
 
 def get_generic_tmpl(file_in, file_out, lang='en'):
     print("Step 4: Converting citations to generic template...")
@@ -201,9 +196,16 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
     citations = sql_context.read.parquet(file_in)
     citations = citations.withColumn('type_of_citation', expr('substring(type_of_citation, 2, length(type_of_citation))'))
 
+    # NK unique citation types that did not get included to the templates
+    citation_types = citations.select('type_of_citation').distinct()
+    accepted = citation_types.filter((citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
+    print("Accepted citation types:", accepted.collect())
+    rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
+    print("Rejected citation types:", rejected.collect())
+
     print("Before matching with templates:", citations.count(), len(citations.columns))
     # NK what is the number of citations before filtering?
-    citations = citations.filter(citations['type_of_citation'].isin(CITATION_TEMPLATES))
+    citations = citations.filter( citations['type_of_citation'].isin(CITATION_TEMPLATES))
     print("After matching with templates:", citations.count(), len(citations.columns))
 
     def check_if_balanced(my_string):
@@ -294,8 +296,7 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
 
     generic_citations = sql_context.createDataFrame(citations.rdd.map(get_as_row))
     generic_citations.write.mode('overwrite').parquet(file_out)
-    sql_context.clearCache()
-
+    
 
 def get_dataset_features(file_in1, file_in2, file_out):
     print("Step 5: Getting dataset features...")
@@ -313,10 +314,13 @@ def get_dataset_features(file_in1, file_in2, file_out):
         col('citations_features._4._2').alias('neighboring_tags')
     )
 
+    dataset_citations = dataset_citations.withColumn("citations", expr("substring(citations, 2, length(citations)-2)"))
+
     filtered = dataset_citations.join(
         base_features,
-        (base_features.page_id == dataset_citations.id),
-        how='inner'
+        (base_features.page_id == dataset_citations.id) &
+        (base_features.retrieved_citation == dataset_citations.citations)
+        , how='inner'
     )
 
     filtered = filtered.select(
@@ -327,17 +331,15 @@ def get_dataset_features(file_in1, file_in2, file_out):
         'type_of_citation',
         'page_id',
         'sections',
-        'retrieved_citation',
         'ref_index',
         'total_words',
         'neighboring_words',
         'neighboring_tags'
     )
-
-    # Drop the column since there are 2 columns with citations
-    filtered = filtered.drop('retrieved_citation')
+    print("Base features count:", base_features.count())
+    print("Dataset citations count:", dataset_citations.count())
+    print("Joint:", filtered.count())
     filtered.write.mode('overwrite').parquet(file_out)
-    sql_context.clearCache()
 
 
 # Select entries with won-empty ID_list
@@ -354,8 +356,7 @@ def filter_with_ids(file_in, file_out):
     citation_with_ids = citation_with_ids.dropDuplicates()
     print("Length filtered:", citation_with_ids.count())
     citation_with_ids.write.mode('overwrite').parquet(file_out)
-    sql_context.clearCache()
-
+    
 
 def get_book_journal_features(file_in, file_out):
     print("Step 6b: Getting book and journal citations...")
@@ -450,8 +451,7 @@ def get_book_journal_features(file_in, file_out):
     citation_with_ids = citation_with_ids.dropDuplicates(['id', 'citations'])
     print('The number of unique citations_with_ids: {}'.format(citation_with_ids.count()))
     citation_with_ids.write.mode('overwrite').parquet(file_out)
-    sql_context.clearCache()
-
+    
 
 def get_newspaper_citations(file_in, file_out):
     print("Step 7: Getting newspaper citations...")
@@ -486,9 +486,9 @@ def get_newspaper_citations(file_in, file_out):
     citations_separated = citations_separated.where(col("type_of_citation").isin(news_templates) | col("tld").isin(newspapers))
     # NK I added elimination of " to match citations with features
     citations_separated = citations_separated.withColumn('citations', regexp_replace('citations', '"', ''))
-    citations_separated.write.mode('overwrite').parquet(file_out)
-    sql_context.clearCache()
 
+    citations_separated.write.mode('overwrite').parquet(file_out)
+    
 
 def get_selected_features(file_in1, file_in2, file_out):
     print("Step 8: Getting selected features...")
@@ -516,74 +516,156 @@ def get_selected_features(file_in1, file_in2, file_out):
     results = results.withColumn('neighboring_words', array_to_string_udf(results["neighboring_words"]))
     results = results.withColumn('neighboring_tags', array_to_string_udf(results["neighboring_tags"]))
 
-    results = results.drop('retrieved_citation')
+    # results = results.drop('retrieved_citation')
     results.write.mode('overwrite').parquet(file_out)
-    sql_context.clearCache()
+
+
+def sample_content(file_out):
+    dataset = sql_context.read.parquet(f_content)
+    dataset = dataset.limit(1000)
+    dataset = dataset.select(
+        'id',
+        'page_title',
+        col('content._VALUE').alias('value'),
+        col('content._bytes').alias('bytes')
+    )
+    dataset.write.mode('overwrite').parquet(file_out)
+
+
+def sample_base(file_out):
+    dataset = sql_context.read.parquet(f_base)
+    dataset = dataset.limit(1000)
+    dataset = dataset.select(
+        'id',
+        'page_title',
+        col('citations_features._1').alias('retrieved_citation'),
+        col('citations_features._2').alias('ref_index'),
+        col('citations_features._3').alias('total_words'),
+        col('citations_features._4._1').alias('neighboring_words'),
+        col('citations_features._4._2').alias('neighboring_tags')
+    )
+
+    def array_to_string(my_list):
+        return '[' + ','.join([str(elem) for elem in my_list]) + ']'
+
+    array_to_string_udf = udf(array_to_string, StringType())
+    dataset = dataset.withColumn('neighboring_words', array_to_string_udf(dataset["neighboring_words"]))
+    dataset = dataset.withColumn('neighboring_tags', array_to_string_udf(dataset["neighboring_tags"]))
+    dataset.write.mode('overwrite').parquet(file_out)
+
+
+def sample_separated(file_out):
+    dataset = sql_context.read.parquet(f_separated)
+    dataset = dataset.limit(1000)
+    dataset.write.mode('overwrite').parquet(file_out)
+
+
+def sample_features(file_out):
+    dataset = sql_context.read.parquet(f_features)
+    dataset = dataset.select(
+        'id',
+        'page_title',
+        'citations',
+        'ID_list'
+    )
+    dataset = dataset.limit(1000)
+    dataset.write.mode('overwrite').parquet(file_out)
 
 
 # Files
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 ext = "en_"
 
-INPUT_DIR = "data/dumps/parts"
-OUTPUT_DIR = 'data/content/parts/'
-CONTENT_DIR = OUTPUT_DIR + 'content/'
-BASE_DIR = OUTPUT_DIR + 'base/'
-SEPARATED_DIR = OUTPUT_DIR + 'separated/'
-FEATURE_DIR = OUTPUT_DIR + 'features/'
+INPUT_DIR       = "data/parts/dumps"
+OUTPUT_DIR      = 'data/parts/'
+CITATIONS_DIR   = OUTPUT_DIR + 'citations/'
+CONTENT_DIR     = OUTPUT_DIR + 'content/'
+BASE_DIR        = OUTPUT_DIR + 'base/'
+SEPARATED_DIR   = OUTPUT_DIR + 'separated/'
+FEATURE_DIR     = OUTPUT_DIR + 'features/'
+FEATURE_DIR_IDS = OUTPUT_DIR + 'features_ids/'
+
 BOOK_JOURNAL_DIR = OUTPUT_DIR + 'book_journal/'
-NEWS_DIR = OUTPUT_DIR + 'news/'
+NEWS_DIR         = OUTPUT_DIR + 'news/'
 NEWS_FEATURE_DIR = OUTPUT_DIR + 'news/features/'
 
+SAMPLES_DIR      = OUTPUT_DIR + '_samples/'
+
+# We will store partial results in files that reuse wiki dump file extensions, i.e., for
+# enwiki-20230220-pages-articles1.xml-p1p41242.bz2 suffix = "-articles1.xml-p1p41242"
+
 # For running on GCloud, a list of files can be iterated through as follows
+def get_files_from_bucket():
+    BUCKET_NAME = os.getenv("BUCKET_NAME", "wikicite-1")
+    BUCKET_PATH = os.getenv("BUCKET_PATH", INPUT_DIR)
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(BUCKET_NAME)
+    content_list = list(bucket.list_blobs(prefix=f"{BUCKET_PATH}/"))
+    file_paths = []
+    extensions = []
+    for index__, b in enumerate(content_list):
+        if b.name.endswith('.bz2'):
+            file_paths.append(PROJECT_HOME + b.name)
+            suffix = b.name[b.name.rfind('-a'): b.name.rfind('.')]
+            extensions.append(suffix)
+    return file_paths, extensions
 
-# BUCKET_NAME = os.getenv("BUCKET_NAME", "wikicite-1")
-# BUCKET_PATH = os.getenv("BUCKET_PATH", INPUT_DIR)
-# storage_client = storage.Client()
-# bucket = storage_client.bucket(BUCKET_NAME)
-# content_list = list(bucket.list_blobs(prefix=f"{BUCKET_PATH}/"))
-# for index__, b in enumerate(content_list):
-#     if b.name.endswith('.bz2'):
-#         suffix = b.name[b.name.rfind('-a'): b.name.rfind('.')]
-#         f_in = PROJECT_HOME + b.name
+
+def get_files_from_disk():
+    content_list = os.listdir(PROJECT_HOME + INPUT_DIR)
+    # content_list = os.listdir(PROJECT_HOME + BASE_DIR)
+    file_paths = []
+    extensions = []
+    for index__, f_name in enumerate(content_list):
+        # if f_name.endswith('.bz2'):
+            file_paths.append(PROJECT_HOME + INPUT_DIR + '/' + f_name)
+            suffix = f_name[f_name.rfind('-a'): f_name.rfind('.')]
+            extensions.append(suffix)
+    return file_paths, extensions
+
+# file_paths, extensions = get_files_from_bucket()
 
 
-FILES = os.listdir(PROJECT_HOME + INPUT_DIR)
-for index__, f_name in enumerate(FILES):
-    if f_name.endswith('.bz2'):
-        # Store partial results in files that reuse wiki dump file extensions, i.e., for
-        # enwiki-20230220-pages-articles1.xml-p1p41242.bz2 suffix = "-articles1.xml-p1p41242"
-        suffix = f_name[f_name.rfind('-a'): f_name.rfind('.')]
-        f_in = PROJECT_HOME + INPUT_DIR + '/' + f_name
+file_paths, extensions = get_files_from_disk()
+for index__, f_in in enumerate(file_paths):
+    suffix = extensions[index__]
+    if suffix:
+        # ***Citation extraction***
+        # File names
 
-        # Dataset extraction
-
-        f_citations = PROJECT_HOME + OUTPUT_DIR + ext + 'citations' + suffix + '.parquet'
-        get_data(f_in, f_citations)
+        f_citations = PROJECT_HOME + CITATIONS_DIR + ext + 'citations' + suffix + '.parquet'
+        f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
 
         f_content = PROJECT_HOME + CONTENT_DIR + ext + 'citations_content' + suffix + '.parquet'
-        get_content(f_in, f_content)
-
         f_base = PROJECT_HOME + BASE_DIR + ext + 'base_features' + suffix + '.parquet'
-        extract_nlp_features(f_content, f_base)
-
-        f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
-        get_generic_tmpl(f_citations, f_separated)
 
         f_features = PROJECT_HOME + FEATURE_DIR + ext + 'citations_features' + suffix + '.parquet'
-        get_dataset_features(f_base, f_separated, f_features)
+        f_feature_ids = PROJECT_HOME + FEATURE_DIR_IDS + ext + 'citations_features_ids' + suffix + '.parquet'
 
-        f_feature_ids = PROJECT_HOME + FEATURE_DIR + ext + 'citations_features_ids' + suffix + '.parquet'
-        filter_with_ids(f_features, f_feature_ids)
+        # Pipeline
 
-        get_dataset_features(f_base, f_separated, f_features)
+        # get_data(f_in, f_citations)
+        get_generic_tmpl(f_citations, f_separated)
 
-        # Labelled datasets for classifier training
+        # get_content(f_in, f_content)
+        # extract_nlp_features(f_content, f_base)
 
+        # get_dataset_features(f_base, f_separated, f_features)
+        # filter_with_ids(f_features, f_feature_ids)
+
+        # sample_content( PROJECT_HOME + SAMPLES_DIR + ext + 'citations_content' + suffix + '.parquet')
+        # sample_base(PROJECT_HOME + SAMPLES_DIR + ext + 'base_features' + suffix + '.parquet')
+        # sample_separated(PROJECT_HOME + SAMPLES_DIR + ext + 'citations_separated' + suffix + '.parquet')
+        # sample_features(PROJECT_HOME + SAMPLES_DIR + ext + 'citations_features' + suffix + '.parquet')
+
+        # ***Labelled datasets for classifier training***
+        # File names
         f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
         f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
         f_news_features = PROJECT_HOME + NEWS_FEATURE_DIR + ext + 'news_citation_features' + suffix + '.parquet'
 
+        # Pipeline
+
         get_book_journal_features(f_feature_ids, f_book_journal)
         get_newspaper_citations(f_separated, f_news)
-        get_selected_features(f_base, f_citations, f_news_features)
+        get_selected_features(f_base, f_news, f_news_features)
