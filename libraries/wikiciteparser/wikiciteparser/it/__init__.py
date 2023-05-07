@@ -1,7 +1,9 @@
 # -*- encoding: utf-8 -*-
 
-# key: normalized wiki template name
-# value: cs1.lua citation class
-citation_template_classes = {
-    'Cita pubblicazione': 'pubblicazione',
-}
+# taken from https://en.wikipedia.org/wiki/Help:Citation_Style_1
+citation_template_names = set([
+    'Cita pubblicazione',
+    # TODO more could be added,
+    # see https://en.wikipedia.org/wiki/
+    #    Category:Citation_Style_1_specific-source_templates
+    ])

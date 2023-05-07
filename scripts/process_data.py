@@ -73,8 +73,6 @@ def get_data(file_in, file_out):
             # NK String representation changed in Python 3
             if tpl.startswith('{{') or tpl.startswith("'{{"):
                 _tpl = repr(tpl)
-                # if _tpl.startswith("'{{") or _tpl.startswith('"{{'):
-                #     _tpl = _tpl[1:len(_tpl) - 1]
                 citations.append(_tpl)
                 sections.append(', '.join(section_features[_tpl]))
         return list(zip(citations, sections))
@@ -197,11 +195,11 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
     citations = citations.withColumn('type_of_citation', expr('substring(type_of_citation, 2, length(type_of_citation))'))
 
     # NK unique citation types that did not get included to the templates
-    citation_types = citations.select('type_of_citation').distinct()
-    accepted = citation_types.filter((citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
-    print("Accepted citation types:", accepted.collect())
-    rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
-    print("Rejected citation types:", rejected.collect())
+    # citation_types = citations.select('type_of_citation').distinct()
+    # accepted = citation_types.filter((citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
+    # print("Accepted citation types:", accepted.collect())
+    # rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
+    # print("Rejected citation types:", rejected.collect())
 
     print("Before matching with templates:", citations.count(), len(citations.columns))
     # NK what is the number of citations before filtering?
@@ -520,58 +518,6 @@ def get_selected_features(file_in1, file_in2, file_out):
     results.write.mode('overwrite').parquet(file_out)
 
 
-def sample_content(file_out):
-    dataset = sql_context.read.parquet(f_content)
-    dataset = dataset.limit(1000)
-    dataset = dataset.select(
-        'id',
-        'page_title',
-        col('content._VALUE').alias('value'),
-        col('content._bytes').alias('bytes')
-    )
-    dataset.write.mode('overwrite').parquet(file_out)
-
-
-def sample_base(file_out):
-    dataset = sql_context.read.parquet(f_base)
-    dataset = dataset.limit(1000)
-    dataset = dataset.select(
-        'id',
-        'page_title',
-        col('citations_features._1').alias('retrieved_citation'),
-        col('citations_features._2').alias('ref_index'),
-        col('citations_features._3').alias('total_words'),
-        col('citations_features._4._1').alias('neighboring_words'),
-        col('citations_features._4._2').alias('neighboring_tags')
-    )
-
-    def array_to_string(my_list):
-        return '[' + ','.join([str(elem) for elem in my_list]) + ']'
-
-    array_to_string_udf = udf(array_to_string, StringType())
-    dataset = dataset.withColumn('neighboring_words', array_to_string_udf(dataset["neighboring_words"]))
-    dataset = dataset.withColumn('neighboring_tags', array_to_string_udf(dataset["neighboring_tags"]))
-    dataset.write.mode('overwrite').parquet(file_out)
-
-
-def sample_separated(file_out):
-    dataset = sql_context.read.parquet(f_separated)
-    dataset = dataset.limit(1000)
-    dataset.write.mode('overwrite').parquet(file_out)
-
-
-def sample_features(file_out):
-    dataset = sql_context.read.parquet(f_features)
-    dataset = dataset.select(
-        'id',
-        'page_title',
-        'citations',
-        'ID_list'
-    )
-    dataset = dataset.limit(1000)
-    dataset.write.mode('overwrite').parquet(file_out)
-
-
 # Files
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 ext = "en_"
@@ -588,8 +534,6 @@ FEATURE_DIR_IDS = OUTPUT_DIR + 'features_ids/'
 BOOK_JOURNAL_DIR = OUTPUT_DIR + 'book_journal/'
 NEWS_DIR         = OUTPUT_DIR + 'news/'
 NEWS_FEATURE_DIR = OUTPUT_DIR + 'news/features/'
-
-SAMPLES_DIR      = OUTPUT_DIR + '_samples/'
 
 # We will store partial results in files that reuse wiki dump file extensions, i.e., for
 # enwiki-20230220-pages-articles1.xml-p1p41242.bz2 suffix = "-articles1.xml-p1p41242"
@@ -614,6 +558,7 @@ def get_files_from_bucket():
 def get_files_from_disk():
     content_list = os.listdir(PROJECT_HOME + INPUT_DIR)
     # content_list = os.listdir(PROJECT_HOME + BASE_DIR)
+    # content_list = os.listdir(PROJECT_HOME + CITATIONS_DIR)
     file_paths = []
     extensions = []
     for index__, f_name in enumerate(content_list):
@@ -653,19 +598,14 @@ for index__, f_in in enumerate(file_paths):
         # get_dataset_features(f_base, f_separated, f_features)
         # filter_with_ids(f_features, f_feature_ids)
 
-        # sample_content( PROJECT_HOME + SAMPLES_DIR + ext + 'citations_content' + suffix + '.parquet')
-        # sample_base(PROJECT_HOME + SAMPLES_DIR + ext + 'base_features' + suffix + '.parquet')
-        # sample_separated(PROJECT_HOME + SAMPLES_DIR + ext + 'citations_separated' + suffix + '.parquet')
-        # sample_features(PROJECT_HOME + SAMPLES_DIR + ext + 'citations_features' + suffix + '.parquet')
-
         # ***Labelled datasets for classifier training***
         # File names
-        f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
-        f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
-        f_news_features = PROJECT_HOME + NEWS_FEATURE_DIR + ext + 'news_citation_features' + suffix + '.parquet'
+        # f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
+        # f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
+        # f_news_features = PROJECT_HOME + NEWS_FEATURE_DIR + ext + 'news_citation_features' + suffix + '.parquet'
 
         # Pipeline
 
-        get_book_journal_features(f_feature_ids, f_book_journal)
-        get_newspaper_citations(f_separated, f_news)
-        get_selected_features(f_base, f_news, f_news_features)
+        # get_book_journal_features(f_feature_ids, f_book_journal)
+        # get_newspaper_citations(f_separated, f_news)
+        # get_selected_features(f_base, f_news, f_news_features)

@@ -185,7 +185,6 @@ def extract_nlp_features(file_in, file_out):
     citations_content.write.mode('overwrite').parquet(file_out)
     
 
-
 def get_generic_tmpl(file_in, file_out, lang='en'):
     print("Step 4: Converting citations to generic template...")
 
@@ -222,14 +221,11 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
         not_parsable = {'Title': 'Citation generic template not possible'}
         if not check_if_balanced(citation):
             citation = citation + '}}'
-        try:
-            # Convert the str into a mwparser object
-            wikicode = mwparserfromhell.parse(citation)
-            template = wikicode.filter_templates()[0]
-            parsed_result = parse_citation_template(template, lang)
-        except Exception as e:
-            print("Failed to parse citation template: ", e)
-            return not_parsable
+        # Convert the str into a mwparser object
+        wikicode = mwparserfromhell.parse(citation)
+        template = wikicode.filter_templates()[0]
+        parsed_result = parse_citation_template(template, lang)
+        return parsed_result
 
         # NK This is a fix for potentially different field types: array vs string
         if "Authors" in parsed_result:
@@ -576,13 +572,13 @@ for index__, f_in in enumerate(file_paths):
        # Pipeline
 
        # get_data(f_in, f_citations)
-       # get_generic_tmpl(f_citations, f_separated)
+       get_generic_tmpl(f_citations, f_separated)
 
        # get_content(f_in, f_content)
        # extract_nlp_features(f_content, f_base)
 
-       get_dataset_features(f_base, f_separated, f_features)
-       filter_with_ids(f_features, f_feature_ids)
+       # get_dataset_features(f_base, f_separated, f_features)
+       # filter_with_ids(f_features, f_feature_ids)
 
        # ***Labelled datasets for classifier training***
        # File names
@@ -592,6 +588,6 @@ for index__, f_in in enumerate(file_paths):
 
        # Pipeline
 
-       get_book_journal_features(f_feature_ids, f_book_journal)
+       # get_book_journal_features(f_feature_ids, f_book_journal)
        # get_newspaper_citations(f_separated, f_news)
        # get_selected_features(f_base, f_news, f_news_features)
