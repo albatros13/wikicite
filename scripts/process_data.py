@@ -229,14 +229,13 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
         not_parsable = {'Title': 'Citation generic template not possible'}
         if not check_if_balanced(citation):
             citation = citation + '}}'
+        # Convert the str into mwparser object
+        wikicode = mwparserfromhell.parse(citation)
         try:
-            # Convert the str into a mwparser object
-            wikicode = mwparserfromhell.parse(citation)
             template = wikicode.filter_templates()[0]
-            parsed_result = parse_citation_template(template, lang)
-        except Exception as e:
-            print("Failed to parse citation template: ", e)
+        except IndexError:
             return not_parsable
+        parsed_result = parse_citation_template(template, lang)
 
         # NK This is a fix for potentially different field types: array vs string
         if "Authors" in parsed_result:
@@ -246,7 +245,8 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
         if "PublisherName" in parsed_result:
             parsed_result["PublisherName"] = parsed_result["PublisherName"].replace("[[",'').replace("]]",'')
 
-        return parsed_result
+        # In case the mwparser is not able to parse the citation template
+        return parsed_result if parsed_result is not None else not_parsable
 
     def get_value(citation, key):
         if key in citation:
@@ -556,9 +556,9 @@ def get_files_from_bucket():
 
 
 def get_files_from_disk():
-    content_list = os.listdir(PROJECT_HOME + INPUT_DIR)
+    # content_list = os.listdir(PROJECT_HOME + INPUT_DIR)
     # content_list = os.listdir(PROJECT_HOME + BASE_DIR)
-    # content_list = os.listdir(PROJECT_HOME + CITATIONS_DIR)
+    content_list = os.listdir(PROJECT_HOME + SEPARATED_DIR)
     file_paths = []
     extensions = []
     for index__, f_name in enumerate(content_list):
@@ -590,7 +590,7 @@ for index__, f_in in enumerate(file_paths):
         # Pipeline
 
         # get_data(f_in, f_citations)
-        get_generic_tmpl(f_citations, f_separated)
+        # get_generic_tmpl(f_citations, f_separated)
 
         # get_content(f_in, f_content)
         # extract_nlp_features(f_content, f_base)

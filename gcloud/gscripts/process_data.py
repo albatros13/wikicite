@@ -223,9 +223,11 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
             citation = citation + '}}'
         # Convert the str into a mwparser object
         wikicode = mwparserfromhell.parse(citation)
-        template = wikicode.filter_templates()[0]
+        try:
+            template = wikicode.filter_templates()[0]
+        except IndexError:
+            return not_parsable
         parsed_result = parse_citation_template(template, lang)
-        return parsed_result
 
         # NK This is a fix for potentially different field types: array vs string
         if "Authors" in parsed_result:
@@ -235,7 +237,8 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
         if "PublisherName" in parsed_result:
             parsed_result["PublisherName"] = parsed_result["PublisherName"].replace("[[",'').replace("]]",'')
 
-        return parsed_result
+        # In case the mwparser is not able to parse the citation template
+        return parsed_result if parsed_result is not None else not_parsable
 
     def get_value(citation, key):
         if key in citation:
