@@ -82,28 +82,11 @@ def get_data(file_in, file_out):
          Get each article's citations with their id and title.
          :param line: the wikicode for the article
         """
-        try:
-            citations = get_citations(line.content)
-            return Row(citations=citations, id=line.id, title=line.title, r_id=line.r_id, r_parentid=line.r_parentid)
-        except Exception as e:
-            print(e)
-            print("Failed to parse", line)
-            return Row(citations=["",""], id="0", title="Skipped", r_id="0", r_parentid="0")
+        citations = get_citations(line.content)
+        return Row(citations=citations, id=line.id, title=line.title, r_id=line.r_id, r_parentid=line.r_parentid)
 
-    schema = StructType([
-        StructField("citations", ArrayType(
-            StructType([
-                StructField("_1", StringType(), True),
-                StructField("_2", StringType(), True)
-            ])
-        )),
-        StructField("id", StringType(), True),
-        StructField("title", StringType(), True),
-        StructField("r_id", StringType(), True),
-        StructField("r_parentid", StringType(), True)
-    ])
+    cite_df = sql_context.createDataFrame(pages.rdd.map(get_as_row))
 
-    cite_df = sql_context.createDataFrame(pages.rdd.map(get_as_row), schema=schema)
     cite_df = cite_df.withColumn('citations', explode('citations'))
     # cite_df = cite_df.withColumn('tmp', zip_('citations', 'sections')).withColumn('tmp', explode('tmp'))
     cite_df = cite_df.select('id', 'r_id', 'r_parentid', 'title', col('citations._1').alias('citations'), col('citations._2').alias('sections'))
@@ -113,6 +96,136 @@ def get_data(file_in, file_out):
 
     print("Extracted citations: ", cite_df.count())
     cite_df.write.mode('overwrite').parquet(file_out)
+
+
+def get_generic_tmpl(file_in, file_out, lang='en'):
+    print("Step 4: Converting citations to generic template...")
+
+    sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
+
+    citations = sql_context.read.parquet(file_in)
+    citations = citations.withColumn('type_of_citation',
+                                     expr('substring(type_of_citation, 2, length(type_of_citation))'))
+
+    # NK unique citation types that did not get included to the templates
+    # citation_types = citations.select('type_of_citation').distinct()
+    # accepted = citation_types.filter((citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
+    # print("Accepted citation types:", accepted.collect())
+    # rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
+    # print("Rejected citation types:", rejected.collect())
+
+    print("Before matching with templates:", citations.count(), len(citations.columns))
+    # NK what is the number of citations before filtering?
+    citations = citations.filter(citations['type_of_citation'].isin(CITATION_TEMPLATES))
+    print("After matching with templates:", citations.count(), len(citations.columns))
+
+    def check_if_balanced(my_string):
+        """
+        Check if particular citation has balanced brackets.
+        :param: citation to be taken in consideration
+        """
+        my_string = re.sub('\w|\s|[^{}]', '', my_string)
+        brackets = ['()', '{}', '[]']
+        while any(x in my_string for x in brackets):
+            for br in brackets:
+                my_string = my_string.replace(br, '')
+        return not my_string
+
+    def list_to_str(items):
+        return ", ".join([str(a) for a in items])
+
+    def get_generic_template(citation):
+        """
+            Get generic template of a citation using the wikiciteparser library.
+            :param: citation - according to a particular format as described in CITATION_TEMPLATES
+        """
+        not_parsable = {'Title': 'Citation generic template not possible'}
+        if not check_if_balanced(citation):
+            citation = citation + '}}'
+        # Convert the str into mwparser object
+        wikicode = mwparserfromhell.parse(citation)
+        try:
+            template = wikicode.filter_templates()[0]
+        except IndexError:
+            return not_parsable
+        parsed_result = parse_citation_template(template, lang)
+
+        # NK This is a fix for potentially different field types: array vs string
+        if "Authors" in parsed_result:
+            parsed_result["Authors"] = list_to_str(parsed_result["Authors"])
+        if "ID_list" in parsed_result:
+            parsed_result["ID_list"] = str(parsed_result["ID_list"])
+        if "PublisherName" in parsed_result:
+            parsed_result["PublisherName"] = parsed_result["PublisherName"].replace("[[", '').replace("]]", '')
+
+        # In case the mwparser is not able to parse the citation template
+        return parsed_result if parsed_result is not None else not_parsable
+
+    def get_value(citation, key):
+        if key in citation:
+            if citation[key] is not None:
+                return citation[key]
+        return ""
+
+    def get_as_row(line):
+        """
+            Get each article's generic templated citations with their id, title and type.
+            :param line: a row from the dataframe generated from get_data.py.
+        """
+        citation_dict = get_generic_template(line.citations)
+        return Row(
+            citations=line.citations,
+            id=line.id,
+            type_of_citation=line.type_of_citation,
+            page_title=line.title,
+            r_id=line.r_id,
+            r_parentid=line.r_parentid,
+            sections=line.sections,
+            Degree=get_value(citation_dict, 'Degree'),
+            City=get_value(citation_dict, 'City'),
+            SeriesNumber=get_value(citation_dict, 'SeriesNumber'),
+            AccessDate=get_value(citation_dict, 'AccessDate'),
+            Chapter=get_value(citation_dict, 'Chapter'),
+            PublisherName=get_value(citation_dict, 'PublisherName'),
+            Format=get_value(citation_dict, 'Format'),
+            Title=get_value(citation_dict, 'Title'),
+            URL=get_value(citation_dict, 'URL'),
+            Series=get_value(citation_dict, 'Series'),
+            Authors=get_value(citation_dict, 'Authors'),
+            ID_list=get_value(citation_dict, 'ID_list'),
+            Encyclopedia=get_value(citation_dict, 'Encyclopedia'),
+            Periodical=get_value(citation_dict, 'Periodical'),
+            PublicationPlace=get_value(citation_dict, 'PublicationPlace'),
+            Date=get_value(citation_dict, 'Date'),
+            Edition=get_value(citation_dict, 'Edition'),
+            Pages=get_value(citation_dict, 'Pages'),
+            Chron=get_value(citation_dict, 'Chron'),
+            Issue=get_value(citation_dict, 'Issue'),
+            Volume=get_value(citation_dict, 'Volume'),
+            TitleType=get_value(citation_dict, 'TitleType')
+        )
+
+    generic_citations = sql_context.createDataFrame(citations.rdd.map(get_as_row))
+    generic_citations.write.mode('overwrite').parquet(file_out)
+
+
+def get_minimal_dataset(file_in, file_out):
+    print("Step final: Getting dataset features...")
+
+    sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
+    dataset = sql_context.read.parquet(file_in)
+
+    dataset = dataset.select(
+        'type_of_citation',
+        'page_title',
+        'Title',
+        'URL',
+        'Authors',
+        'ID_list',
+        'citations'
+    )
+    print("Minimal dataset count:", dataset.count())
+    dataset.write.mode('overwrite').parquet(file_out)
 
 
 def get_content(file_in, file_out):
@@ -186,116 +299,6 @@ def extract_nlp_features(file_in, file_out):
     citations_content.write.mode('overwrite').parquet(file_out)
     
 
-def get_generic_tmpl(file_in, file_out, lang='en'):
-    print("Step 4: Converting citations to generic template...")
-
-    sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
-
-    citations = sql_context.read.parquet(file_in)
-    citations = citations.withColumn('type_of_citation', expr('substring(type_of_citation, 2, length(type_of_citation))'))
-
-    # NK unique citation types that did not get included to the templates
-    # citation_types = citations.select('type_of_citation').distinct()
-    # accepted = citation_types.filter((citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
-    # print("Accepted citation types:", accepted.collect())
-    # rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
-    # print("Rejected citation types:", rejected.collect())
-
-    print("Before matching with templates:", citations.count(), len(citations.columns))
-    # NK what is the number of citations before filtering?
-    citations = citations.filter( citations['type_of_citation'].isin(CITATION_TEMPLATES))
-    print("After matching with templates:", citations.count(), len(citations.columns))
-
-    def check_if_balanced(my_string):
-        """
-        Check if particular citation has balanced brackets.
-        :param: citation to be taken in consideration
-        """
-        my_string = re.sub('\w|\s|[^{}]','', my_string)
-        brackets = ['()', '{}', '[]']
-        while any(x in my_string for x in brackets):
-            for br in brackets:
-                my_string = my_string.replace(br, '')
-        return not my_string
-
-    def list_to_str(items):
-        return ", ".join([str(a) for a in items])
-
-    def get_generic_template(citation):
-        """
-            Get generic template of a citation using the wikiciteparser library.
-            :param: citation - according to a particular format as described in CITATION_TEMPLATES
-        """
-        not_parsable = {'Title': 'Citation generic template not possible'}
-        if not check_if_balanced(citation):
-            citation = citation + '}}'
-        # Convert the str into mwparser object
-        wikicode = mwparserfromhell.parse(citation)
-        try:
-            template = wikicode.filter_templates()[0]
-        except IndexError:
-            return not_parsable
-        parsed_result = parse_citation_template(template, lang)
-
-        # NK This is a fix for potentially different field types: array vs string
-        if "Authors" in parsed_result:
-            parsed_result["Authors"] = list_to_str(parsed_result["Authors"])
-        if "ID_list" in parsed_result:
-            parsed_result["ID_list"] = str(parsed_result["ID_list"])
-        if "PublisherName" in parsed_result:
-            parsed_result["PublisherName"] = parsed_result["PublisherName"].replace("[[",'').replace("]]",'')
-
-        # In case the mwparser is not able to parse the citation template
-        return parsed_result if parsed_result is not None else not_parsable
-
-    def get_value(citation, key):
-        if key in citation:
-            if citation[key] is not None:
-                return citation[key]
-        return ""
-
-    def get_as_row(line):
-        """
-            Get each article's generic templated citations with their id, title and type.
-            :param line: a row from the dataframe generated from get_data.py.
-        """
-        citation_dict = get_generic_template(line.citations)
-        return Row(
-            citations=line.citations,
-            id=line.id,
-            type_of_citation=line.type_of_citation,
-            page_title=line.title,
-            r_id=line.r_id,
-            r_parentid=line.r_parentid,
-            sections=line.sections,
-            Degree=get_value(citation_dict, 'Degree'),
-            City=get_value(citation_dict, 'City'),
-            SeriesNumber=get_value(citation_dict, 'SeriesNumber'),
-            AccessDate=get_value(citation_dict, 'AccessDate'),
-            Chapter=get_value(citation_dict, 'Chapter'),
-            PublisherName=get_value(citation_dict, 'PublisherName'),
-            Format=get_value(citation_dict, 'Format'),
-            Title=get_value(citation_dict, 'Title'),
-            URL=get_value(citation_dict, 'URL'),
-            Series=get_value(citation_dict, 'Series'),
-            Authors=get_value(citation_dict, 'Authors'),
-            ID_list=get_value(citation_dict, 'ID_list'),
-            Encyclopedia=get_value(citation_dict, 'Encyclopedia'),
-            Periodical=get_value(citation_dict, 'Periodical'),
-            PublicationPlace=get_value(citation_dict, 'PublicationPlace'),
-            Date=get_value(citation_dict, 'Date'),
-            Edition=get_value(citation_dict, 'Edition'),
-            Pages=get_value(citation_dict, 'Pages'),
-            Chron=get_value(citation_dict, 'Chron'),
-            Issue=get_value(citation_dict, 'Issue'),
-            Volume=get_value(citation_dict, 'Volume'),
-            TitleType=get_value(citation_dict, 'TitleType')
-        )
-
-    generic_citations = sql_context.createDataFrame(citations.rdd.map(get_as_row))
-    generic_citations.write.mode('overwrite').parquet(file_out)
-    
-
 def get_dataset_features(file_in1, file_in2, file_out):
     print("Step 5: Getting dataset features...")
 
@@ -334,6 +337,14 @@ def get_dataset_features(file_in1, file_in2, file_out):
         'neighboring_words',
         'neighboring_tags'
     )
+
+    # def array_to_string(my_list):
+    #     return '[' + ','.join([str(elem) for elem in my_list]) + ']'
+    #
+    # array_to_string_udf = udf(array_to_string)
+    # filtered = filtered.withColumn('neighboring_tags', array_to_string_udf("neighboring_tags"))
+    # filtered = filtered.withColumn('neighboring_words', array_to_string_udf("neighboring_words"))
+
     print("Base features count:", base_features.count())
     print("Dataset citations count:", dataset_citations.count())
     print("Joint:", filtered.count())
@@ -426,14 +437,13 @@ def get_book_journal_features(file_in, file_out):
         citation_with_ids = citation_with_ids.drop(id_)
     citation_with_ids = citation_with_ids.drop("ID_list", 'kinds_of_ids')
 
-    def array_to_string(my_list):
-        return '[' + ','.join([str(elem) for elem in my_list]) + ']'
-
-    array_to_string_udf = udf(array_to_string)
-
-    # NK Without this spark at gcloud fails to write the result on disk
-    citation_with_ids = citation_with_ids.withColumn('neighboring_tags', array_to_string_udf("neighboring_tags"))
-    citation_with_ids = citation_with_ids.withColumn('neighboring_words', array_to_string_udf("neighboring_words"))
+    # def array_to_string(my_list):
+    #     return '[' + ','.join([str(elem) for elem in my_list]) + ']'
+    #
+    # array_to_string_udf = udf(array_to_string)
+    #
+    # citation_with_ids = citation_with_ids.withColumn('neighboring_tags', array_to_string_udf("neighboring_tags"))
+    # citation_with_ids = citation_with_ids.withColumn('neighboring_words', array_to_string_udf("neighboring_words"))
 
     citation_with_ids = citation_with_ids.select(
       'type_of_citation', 'citations', 'id', 'ref_index', 'sections',
@@ -504,15 +514,14 @@ def get_selected_features(file_in1, file_in2, file_out):
     )
 
     selected_features = sql_context.read.parquet(file_in2)
-
-    def array_to_string(my_list):
-       return '[' + ','.join([str(elem) for elem in my_list]) + ']'
-
-    array_to_string_udf = udf(array_to_string,StringType())
-
     results = features.join(selected_features, features['retrieved_citation'] == selected_features['citations'])
-    results = results.withColumn('neighboring_words', array_to_string_udf(results["neighboring_words"]))
-    results = results.withColumn('neighboring_tags', array_to_string_udf(results["neighboring_tags"]))
+
+    # def array_to_string(my_list):
+    #    return '[' + ','.join([str(elem) for elem in my_list]) + ']'
+    #
+    # array_to_string_udf = udf(array_to_string,StringType())
+    # results = results.withColumn('neighboring_words', array_to_string_udf(results["neighboring_words"]))
+    # results = results.withColumn('neighboring_tags', array_to_string_udf(results["neighboring_tags"]))
 
     # results = results.drop('retrieved_citation')
     results.write.mode('overwrite').parquet(file_out)
@@ -522,17 +531,20 @@ def get_selected_features(file_in1, file_in2, file_out):
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
 ext = "en_"
 
-INPUT_DIR       = "data/parts/dumps"
-OUTPUT_DIR      = 'data/parts/'
-CITATIONS_DIR   = OUTPUT_DIR + 'citations/'
-CONTENT_DIR     = OUTPUT_DIR + 'content/'
-BASE_DIR        = OUTPUT_DIR + 'base/'
-SEPARATED_DIR   = OUTPUT_DIR + 'separated/'
-FEATURE_DIR     = OUTPUT_DIR + 'features/'
+INPUT_DIR = "data/parts/dumps"
+OUTPUT_DIR = 'data/parts/'
+
+CITATIONS_DIR = OUTPUT_DIR + 'citations/'
+MINIMAL_DIR = OUTPUT_DIR + 'minimal/'
+SEPARATED_DIR = OUTPUT_DIR + 'separated/'
+
+CONTENT_DIR = OUTPUT_DIR + 'content/'
+BASE_DIR = OUTPUT_DIR + 'base/'
+FEATURE_DIR = OUTPUT_DIR + 'features/'
 FEATURE_DIR_IDS = OUTPUT_DIR + 'features_ids/'
 
 BOOK_JOURNAL_DIR = OUTPUT_DIR + 'book_journal/'
-NEWS_DIR         = OUTPUT_DIR + 'news/'
+NEWS_DIR = OUTPUT_DIR + 'news/'
 NEWS_FEATURE_DIR = OUTPUT_DIR + 'news/features/'
 
 # We will store partial results in files that reuse wiki dump file extensions, i.e., for
@@ -556,13 +568,11 @@ def get_files_from_bucket():
 
 
 def get_files_from_disk():
-    # content_list = os.listdir(PROJECT_HOME + INPUT_DIR)
-    # content_list = os.listdir(PROJECT_HOME + BASE_DIR)
-    content_list = os.listdir(PROJECT_HOME + SEPARATED_DIR)
+    content_list = os.listdir(PROJECT_HOME + INPUT_DIR)
     file_paths = []
     extensions = []
     for index__, f_name in enumerate(content_list):
-        # if f_name.endswith('.bz2'):
+        if f_name.endswith('.bz2'):
             file_paths.append(PROJECT_HOME + INPUT_DIR + '/' + f_name)
             suffix = f_name[f_name.rfind('-a'): f_name.rfind('.')]
             extensions.append(suffix)
@@ -574,38 +584,48 @@ def get_files_from_disk():
 file_paths, extensions = get_files_from_disk()
 for index__, f_in in enumerate(file_paths):
     suffix = extensions[index__]
-    if suffix:
-        # ***Citation extraction***
+    if suffix and index__==0:
+        # 1 ***Citation extraction***
+
         # File names
 
         f_citations = PROJECT_HOME + CITATIONS_DIR + ext + 'citations' + suffix + '.parquet'
         f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
+        f_minimal = PROJECT_HOME + MINIMAL_DIR + ext + 'minimal' + suffix + '.parquet'
+
+        # Pipeline
+
+        get_data(f_in, f_citations)
+        get_generic_tmpl(f_citations, f_separated)
+        get_minimal_dataset(f_separated, f_minimal)
+
+        # 2. ***Adding citation context*** (optional, used for classifier training)
+
+        # File names
 
         f_content = PROJECT_HOME + CONTENT_DIR + ext + 'citations_content' + suffix + '.parquet'
         f_base = PROJECT_HOME + BASE_DIR + ext + 'base_features' + suffix + '.parquet'
-
         f_features = PROJECT_HOME + FEATURE_DIR + ext + 'citations_features' + suffix + '.parquet'
         f_feature_ids = PROJECT_HOME + FEATURE_DIR_IDS + ext + 'citations_features_ids' + suffix + '.parquet'
 
         # Pipeline
 
-        # get_data(f_in, f_citations)
-        # get_generic_tmpl(f_citations, f_separated)
-
         # get_content(f_in, f_content)
         # extract_nlp_features(f_content, f_base)
-
         # get_dataset_features(f_base, f_separated, f_features)
         # filter_with_ids(f_features, f_feature_ids)
 
-        # ***Labelled datasets for classifier training***
+        # 3 ***Labelled datasets for classifier training***
+
         # File names
+
         # f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
         # f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
         # f_news_features = PROJECT_HOME + NEWS_FEATURE_DIR + ext + 'news_citation_features' + suffix + '.parquet'
 
         # Pipeline
 
+        # get_book_journal_features(f_feature_ids, f_book_journal)
         # get_book_journal_features(f_feature_ids, f_book_journal)
         # get_newspaper_citations(f_separated, f_news)
         # get_selected_features(f_base, f_news, f_news_features)

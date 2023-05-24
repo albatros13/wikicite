@@ -10,6 +10,7 @@ import re
 
 
 def clear_bias(data, no_id_fraction=0):
+    # NK remove url?!
     labels = ['doi', 'isbn', 'pmc', 'pmid', 'url', 'news']
     for label in labels:
         data['citations'] = data['citations'].progress_apply(
