@@ -118,7 +118,7 @@ def predict_citations(PROJECT_HOME, ext):
         all_examples = pd.read_parquet(f_name_path, engine='pyarrow')
 
         # TODO NK Remove - 350k are enough to get all 35 tags present
-        all_examples = all_examples.head(350000)
+        # all_examples = all_examples.head(350000)
         # all_examples = all_examples.head(1000)
 
         print('Doing filename: {} with citations: {}'.format(f_name, all_examples.shape[0]))
@@ -129,8 +129,8 @@ def predict_citations(PROJECT_HOME, ext):
         # print(all_examples['needs_a_label'].head(100))
 
         not_wild_examples = all_examples[all_examples['needs_a_label'] != 'NO LABEL'].reset_index(drop=True)
-        # wild_examples = all_examples[all_examples['needs_a_label'] == 'NO LABEL'].reset_index(drop=True)
-        wild_examples = all_examples
+        wild_examples = all_examples[all_examples['needs_a_label'] == 'NO LABEL'].reset_index(drop=True)
+        # wild_examples = all_examples
         print('Preprocessing the citations for wild examples')
         print(all_examples.shape, wild_examples.shape, not_wild_examples.shape)
 
