@@ -338,13 +338,6 @@ def get_dataset_features(file_in1, file_in2, file_out):
         'neighboring_tags'
     )
 
-    # def array_to_string(my_list):
-    #     return '[' + ','.join([str(elem) for elem in my_list]) + ']'
-    #
-    # array_to_string_udf = udf(array_to_string)
-    # filtered = filtered.withColumn('neighboring_tags', array_to_string_udf("neighboring_tags"))
-    # filtered = filtered.withColumn('neighboring_words', array_to_string_udf("neighboring_words"))
-
     print("Base features count:", base_features.count())
     print("Dataset citations count:", dataset_citations.count())
     print("Joint:", filtered.count())
@@ -578,6 +571,7 @@ def get_files_from_disk():
             extensions.append(suffix)
     return file_paths, extensions
 
+
 # file_paths, extensions = get_files_from_bucket()
 
 
@@ -587,28 +581,20 @@ for index__, f_in in enumerate(file_paths):
     if suffix and index__==0:
         # 1 ***Citation extraction***
 
-        # File names
+        # f_citations = PROJECT_HOME + CITATIONS_DIR + ext + 'citations' + suffix + '.parquet'
+        # f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
+        # f_minimal = PROJECT_HOME + MINIMAL_DIR + ext + 'minimal' + suffix + '.parquet'
 
-        f_citations = PROJECT_HOME + CITATIONS_DIR + ext + 'citations' + suffix + '.parquet'
-        f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
-        f_minimal = PROJECT_HOME + MINIMAL_DIR + ext + 'minimal' + suffix + '.parquet'
-
-        # Pipeline
-
-        get_data(f_in, f_citations)
-        get_generic_tmpl(f_citations, f_separated)
-        get_minimal_dataset(f_separated, f_minimal)
+        # get_data(f_in, f_citations)
+        # get_generic_tmpl(f_citations, f_separated)
+        # get_minimal_dataset(f_separated, f_minimal)
 
         # 2. ***Adding citation context*** (optional, used for classifier training)
 
-        # File names
-
-        f_content = PROJECT_HOME + CONTENT_DIR + ext + 'citations_content' + suffix + '.parquet'
-        f_base = PROJECT_HOME + BASE_DIR + ext + 'base_features' + suffix + '.parquet'
-        f_features = PROJECT_HOME + FEATURE_DIR + ext + 'citations_features' + suffix + '.parquet'
-        f_feature_ids = PROJECT_HOME + FEATURE_DIR_IDS + ext + 'citations_features_ids' + suffix + '.parquet'
-
-        # Pipeline
+        # f_content = PROJECT_HOME + CONTENT_DIR + ext + 'citations_content' + suffix + '.parquet'
+        # f_base = PROJECT_HOME + BASE_DIR + ext + 'base_features' + suffix + '.parquet'
+        # f_features = PROJECT_HOME + FEATURE_DIR + ext + 'citations_features' + suffix + '.parquet'
+        # f_feature_ids = PROJECT_HOME + FEATURE_DIR_IDS + ext + 'citations_features_ids' + suffix + '.parquet'
 
         # get_content(f_in, f_content)
         # extract_nlp_features(f_content, f_base)
@@ -617,15 +603,14 @@ for index__, f_in in enumerate(file_paths):
 
         # 3 ***Labelled datasets for classifier training***
 
-        # File names
-
-        # f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
+        f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
         # f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
         # f_news_features = PROJECT_HOME + NEWS_FEATURE_DIR + ext + 'news_citation_features' + suffix + '.parquet'
-
-        # Pipeline
 
         # get_book_journal_features(f_feature_ids, f_book_journal)
         # get_book_journal_features(f_feature_ids, f_book_journal)
         # get_newspaper_citations(f_separated, f_news)
         # get_selected_features(f_base, f_news, f_news_features)
+
+        # 4 ***Lookout to equip
+        # Run lookout.py
