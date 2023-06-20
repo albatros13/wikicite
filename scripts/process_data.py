@@ -365,7 +365,8 @@ def get_book_journal_features(file_in, file_out):
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     citation_with_ids = sql_context.read.parquet(file_in)
-    citation_with_ids = citation_with_ids.limit(1000000)
+
+    print('Number of input rows: {}'.format(citation_with_ids.count()))
 
     parser = lambda x: list(re.split('=|:', item)
                             for item in
@@ -394,7 +395,7 @@ def get_book_journal_features(file_in, file_out):
     for id_ in kinds_of_ids:
         citation_with_ids = citation_with_ids.withColumn(id_, lit(None))
 
-    citation_with_ids = citation_with_ids.withColumn('actual_label', lit("rest"))
+    citation_with_ids = citation_with_ids.withColumn('actual_label', lit("other"))
 
     for id_ in kinds_of_ids:
         def get_citation_val(x):
@@ -402,11 +403,12 @@ def get_book_journal_features(file_in, file_out):
                 if item[0] == id_ and len(item) > 1:
                     return item[1]
             return None
+
         udf_get_citation_val = udf(get_citation_val)
         citation_with_ids = citation_with_ids.withColumn(id_, udf_get_citation_val("ID_list"))
 
     def get_label(doi, pmid, pmc, isbn, type):
-        category = 'rest'
+        category = 'other'
         if pmid or pmc:
             category = 'journal'
         if doi and not pmc and not pmid and not isbn:
@@ -421,53 +423,62 @@ def get_book_journal_features(file_in, file_out):
         return category
 
     udf_get_label = udf(get_label)
-    citation_with_ids = citation_with_ids.withColumn('actual_label', udf_get_label('DOI', 'PMID', 'PMC', 'ISBN', 'type_of_citation'))
 
-    citation_with_ids = citation_with_ids.filter(col('actual_label').isin(['book', 'journal']))
-    print('The total number of citations_with_ids: {}'.format(citation_with_ids.count()))
+    citation_with_ids = citation_with_ids.withColumn('actual_label',
+                                                     udf_get_label('DOI', 'PMID', 'PMC', 'ISBN', 'type_of_citation'))
 
-    for id_ in kinds_of_ids:
-        citation_with_ids = citation_with_ids.drop(id_)
-    citation_with_ids = citation_with_ids.drop("ID_list", 'kinds_of_ids')
+    print('The total number of citations: {}'.format(citation_with_ids.count()))
+    books = citation_with_ids.filter(col('actual_label').isin(['book']))
+    journals = citation_with_ids.filter(col('actual_label').isin(['journal']))
+    print('The total number of books: {}'.format(books.count()))
+    print('The total number of journals: {}'.format(journals.count()))
 
-    # def array_to_string(my_list):
-    #     return '[' + ','.join([str(elem) for elem in my_list]) + ']'
-    #
-    # array_to_string_udf = udf(array_to_string)
-    #
-    # citation_with_ids = citation_with_ids.withColumn('neighboring_tags', array_to_string_udf("neighboring_tags"))
-    # citation_with_ids = citation_with_ids.withColumn('neighboring_words', array_to_string_udf("neighboring_words"))
-
-    citation_with_ids = citation_with_ids.select(
-      'type_of_citation', 'citations', 'id', 'ref_index', 'sections',
-      'total_words', 'neighboring_tags', 'neighboring_words', 'actual_label')
-
-    labels = ['doi', 'isbn', 'pmc', 'pmid', 'url', 'work', 'newspaper', 'website']
-    for label in labels:
-        def remove_bias(x):
-            return re.sub(label + '\s{0,10}=\s{0,10}([^|]+)', label + ' = ', x)
-        udf_remove_bias = udf(remove_bias)
-        citation_with_ids = citation_with_ids.withColumn('citations', udf_remove_bias('citations'))
-
-    citation_with_ids = citation_with_ids.dropDuplicates(['id', 'citations'])
     print('The number of unique citations_with_ids: {}'.format(citation_with_ids.count()))
     citation_with_ids.write.mode('overwrite').parquet(file_out)
-    
 
-def get_newspaper_citations(file_in, file_out):
+    # NK old code that filteres books and journals from the joint context features file
+
+    # citation_with_ids = citation_with_ids.filter(col('actual_label').isin(['book', 'journal']))
+    # print('The total number of citations_with_ids: {}'.format(citation_with_ids.count()))
+    #
+    # for id_ in kinds_of_ids:
+    #     citation_with_ids = citation_with_ids.drop(id_)
+    # citation_with_ids = citation_with_ids.drop("ID_list", 'kinds_of_ids')
+    #
+    # citation_with_ids = citation_with_ids.select(
+    #   'type_of_citation', 'citations', 'id', 'ref_index', 'sections',
+    #   'total_words', 'neighboring_tags', 'neighboring_words', 'actual_label')
+    #
+    # labels = ['doi', 'isbn', 'pmc', 'pmid', 'url', 'work', 'newspaper', 'website']
+    # for label in labels:
+    #     def remove_bias(x):
+    #         return re.sub(label + '\s{0,10}=\s{0,10}([^|]+)', label + ' = ', x)
+    #     udf_remove_bias = udf(remove_bias)
+    #     citation_with_ids = citation_with_ids.withColumn('citations', udf_remove_bias('citations'))
+    #
+    # citation_with_ids = citation_with_ids.dropDuplicates(['id', 'citations'])
+    # print('The number of unique citations_with_ids: {}'.format(citation_with_ids.count()))
+    # citation_with_ids.write.mode('overwrite').parquet(file_out)
+
+
+def get_newspaper_citations(file_in, file_out, file_domains):
     print("Step 7: Getting newspaper citations...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
-    citations_separated = sql_context.read.parquet(file_in)
+    dataset = sql_context.read.parquet(file_in)
 
-    citations_separated = citations_separated.where(col("URL").isNotNull())
+    dataset = dataset.where(col("URL").isNotNull())
 
     def get_top_domain(citation_url):
-        url_ext = tldextract.extract(citation_url)
+        trimmed_url = citation_url.replace('https://', '').replace('www.', '')\
+            .replace('youtube.com/', '').replace('instagram.com/', '')\
+            .replace('facebook.com/', '').replace('twitter.com/', '').replace('pinterest.com/', '')\
+            .replace('user/', '').replace('plus.google.com/', '')
+        url_ext = tldextract.extract(trimmed_url)
         return url_ext.domain
 
     top_domain_udf = udf(get_top_domain)
-    citations_separated = citations_separated.withColumn('tld', top_domain_udf('URL'))
+    dataset = dataset.withColumn('tld', top_domain_udf('URL'))
 
     # NK this is the original list of top news agency domains - I use a longer list
     # newspapers = {'nytimes', 'bbc', 'washingtonpost', 'cnn', 'theguardian', 'huffingtonpost', 'indiatimes',
@@ -476,19 +487,27 @@ def get_newspaper_citations(file_in, file_out):
     # NK distinct set of news agency domains from 'cite news' dataset
     # citations_separated.select("tld").distinct().write.format('com.databricks.spark.csv').save('./data/newspaper_domains.csv')
 
-    newspapers = {'globo', 'signonsandiego', 'terra ', 'bbc', 'uol', 'cnn', 'espncricinfo', 'news18', 'msn',
-                  'theguardian', 'washingtonpost', 'guardian', 'telegraph', 'reuters',
-                  'cbc', 'mg', 'dailymail', 'youthvillage', 'afternoonexpress', 'usatoday', 'goal', 'timesonline',
-                  'tvsa', 'slashdot', 'mtvbase', 'dailysun', 'chicagotribune', 'news24', 'skysports', 'smh', 'billboard',
-                  'fifa', 'nytimes', 'iol', 'rsssf', 'independent', 'nupedia', 'yahoo'}
+    # newspapers = {'globo', 'signonsandiego', 'terra ', 'bbc', 'uol', 'cnn', 'espncricinfo', 'news18', 'msn',
+    #               'theguardian', 'washingtonpost', 'guardian', 'telegraph', 'reuters',
+    #               'cbc', 'mg', 'dailymail', 'youthvillage', 'afternoonexpress', 'usatoday', 'goal', 'timesonline',
+    #               'tvsa', 'slashdot', 'mtvbase', 'dailysun', 'chicagotribune', 'news24', 'skysports', 'smh', 'billboard',
+    #               'fifa', 'nytimes', 'iol', 'rsssf', 'independent', 'nupedia', 'yahoo'}
+    #
 
-    news_templates = {'cite news'}
+    f = open(file_domains)
+    newspapers = f.read().split(',')
+    print(len(newspapers))
 
-    citations_separated = citations_separated.where(col("type_of_citation").isin(news_templates) | col("tld").isin(newspapers))
+    # news_templates = {'cite news'}
+
+    # dataset = dataset.where(col("type_of_citation").isin(news_templates) | col("tld").isin(newspapers))
+    dataset = dataset.where(col("tld").isin(newspapers))
+    print(dataset.count())
+
     # NK I added elimination of " to match citations with features
-    citations_separated = citations_separated.withColumn('citations', regexp_replace('citations', '"', ''))
+    # dataset = dataset.withColumn('citations', regexp_replace('citations', '"', ''))
 
-    citations_separated.write.mode('overwrite').parquet(file_out)
+    # dataset.write.mode('overwrite').parquet(file_out)
     
 
 def get_selected_features(file_in1, file_in2, file_out):
@@ -604,13 +623,16 @@ for index__, f_in in enumerate(file_paths):
         # 3 ***Labelled datasets for classifier training***
 
         f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
-        # f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
+        f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
         # f_news_features = PROJECT_HOME + NEWS_FEATURE_DIR + ext + 'news_citation_features' + suffix + '.parquet'
 
         # get_book_journal_features(f_feature_ids, f_book_journal)
         # get_book_journal_features(f_feature_ids, f_book_journal)
         # get_newspaper_citations(f_separated, f_news)
         # get_selected_features(f_base, f_news, f_news_features)
+
+        # NK label news in the file with citations without context/auxiliary features
+        get_newspaper_citations(f_book_journal, f_news, '../news/domains.txt')
 
         # 4 ***Lookout to equip
         # Run lookout.py

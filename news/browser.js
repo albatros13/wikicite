@@ -71,7 +71,7 @@ function get_data(source, inputFile){
 
 // get_data('https://www.newsmedialists.com', 'newsmedialists/countries-newspapers.txt')
 // get_data('https://www.newsmedialists.com', 'newsmedialists/countries-tv.txt')
-// get_data('https://www.newsmedialists.com', 'newsmedialists/countries-magazines.txt')
+get_data('https://www.newsmedialists.com', 'newsmedialists/countries-magazines.txt')
 
 
 
