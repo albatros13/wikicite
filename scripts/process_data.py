@@ -436,7 +436,7 @@ def get_book_journal_features(file_in, file_out):
     print('The number of unique citations_with_ids: {}'.format(citation_with_ids.count()))
     citation_with_ids.write.mode('overwrite').parquet(file_out)
 
-    # NK old code that filteres books and journals from the joint context features file
+    # NK old code that filters books and journals from the joint context features file
 
     # citation_with_ids = citation_with_ids.filter(col('actual_label').isin(['book', 'journal']))
     # print('The total number of citations_with_ids: {}'.format(citation_with_ids.count()))
@@ -467,9 +467,11 @@ def get_newspaper_citations(file_in, file_out, file_domains):
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     dataset = sql_context.read.parquet(file_in)
 
-    dataset = dataset.where(col("URL").isNotNull())
+    # dataset = dataset.where(col("URL").isNotNull())
 
     def get_top_domain(citation_url):
+        if not citation_url:
+            return ''
         trimmed_url = citation_url.replace('https://', '').replace('www.', '')\
             .replace('youtube.com/', '').replace('instagram.com/', '')\
             .replace('facebook.com/', '').replace('twitter.com/', '').replace('pinterest.com/', '')\
@@ -480,38 +482,48 @@ def get_newspaper_citations(file_in, file_out, file_domains):
     top_domain_udf = udf(get_top_domain)
     dataset = dataset.withColumn('tld', top_domain_udf('URL'))
 
-    # NK this is the original list of top news agency domains - I use a longer list
-    # newspapers = {'nytimes', 'bbc', 'washingtonpost', 'cnn', 'theguardian', 'huffingtonpost', 'indiatimes',
-    #               'independent', 'dailymail', 'telegraph', 'timesonline', 'reuters'}
+    # Bucket
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(BUCKET_NAME)
+    blob = bucket.blob(file_domains).download_as_string()
+    f = blob.decode("utf-8")
+    newspapers = f.split(',')
 
-    # NK distinct set of news agency domains from 'cite news' dataset
-    # citations_separated.select("tld").distinct().write.format('com.databricks.spark.csv').save('./data/newspaper_domains.csv')
+    # Local files
+    # f = open(PROJECT_HOME + file_domains)
+    # newspapers = f.read().split(',')
 
-    # newspapers = {'globo', 'signonsandiego', 'terra ', 'bbc', 'uol', 'cnn', 'espncricinfo', 'news18', 'msn',
-    #               'theguardian', 'washingtonpost', 'guardian', 'telegraph', 'reuters',
-    #               'cbc', 'mg', 'dailymail', 'youthvillage', 'afternoonexpress', 'usatoday', 'goal', 'timesonline',
-    #               'tvsa', 'slashdot', 'mtvbase', 'dailysun', 'chicagotribune', 'news24', 'skysports', 'smh', 'billboard',
-    #               'fifa', 'nytimes', 'iol', 'rsssf', 'independent', 'nupedia', 'yahoo'}
-    #
+    print('The total number of news domains: {}'.format(len(newspapers)))
 
-    f = open(file_domains)
-    newspapers = f.read().split(',')
-    print(len(newspapers))
+    def get_label(tld, actual_label):
+        if actual_label == 'other':
+            if tld in newspapers:
+                return "news"
+        return actual_label
 
-    # news_templates = {'cite news'}
+    udf_get_label = udf(get_label)
 
-    # dataset = dataset.where(col("type_of_citation").isin(news_templates) | col("tld").isin(newspapers))
-    dataset = dataset.where(col("tld").isin(newspapers))
-    print(dataset.count())
+    dataset = dataset.withColumn('actual_label', udf_get_label('tld', 'actual_label'))
 
-    # NK I added elimination of " to match citations with features
+    print('The total number of citations: {}'.format(dataset.count()))
+
+    books = dataset.filter(col('actual_label').isin(['book']))
+    journals = dataset.filter(col('actual_label').isin(['journal']))
+    news = dataset.filter(col('actual_label').isin(['news']))
+    print('The total number of books: {}'.format(books.count()))
+    print('The total number of journals: {}'.format(journals.count()))
+    print('The total number of news: {}'.format(news.count()))
+
+    # NK old version - filtering of the dataset
+    # dataset = dataset.where(col("tld").isin(newspapers))
+    # Remove " to be able to match citations with auxiliary features in the old version
     # dataset = dataset.withColumn('citations', regexp_replace('citations', '"', ''))
 
-    # dataset.write.mode('overwrite').parquet(file_out)
+    dataset.write.mode('overwrite').parquet(file_out)
     
 
 def get_selected_features(file_in1, file_in2, file_out):
-    print("Step 8: Getting selected features...")
+    print("Step 8: Merging citations with context...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     features = sql_context.read.parquet(file_in1)
@@ -524,7 +536,6 @@ def get_selected_features(file_in1, file_in2, file_out):
         col('citations_features._4._1').alias('neighboring_words'),
         col('citations_features._4._2').alias('neighboring_tags'),
     )
-
     selected_features = sql_context.read.parquet(file_in2)
     results = features.join(selected_features, features['retrieved_citation'] == selected_features['citations'])
 
@@ -547,8 +558,8 @@ INPUT_DIR = "data/parts/dumps"
 OUTPUT_DIR = 'data/parts/'
 
 CITATIONS_DIR = OUTPUT_DIR + 'citations/'
-MINIMAL_DIR = OUTPUT_DIR + 'minimal/'
 SEPARATED_DIR = OUTPUT_DIR + 'separated/'
+MINIMAL_DIR = OUTPUT_DIR + 'minimal/'
 
 CONTENT_DIR = OUTPUT_DIR + 'content/'
 BASE_DIR = OUTPUT_DIR + 'base/'
@@ -556,16 +567,21 @@ FEATURE_DIR = OUTPUT_DIR + 'features/'
 FEATURE_DIR_IDS = OUTPUT_DIR + 'features_ids/'
 
 BOOK_JOURNAL_DIR = OUTPUT_DIR + 'book_journal/'
+BOOK_JOURNAL_DIR_EXT = OUTPUT_DIR + 'book_journal_ext/'
+
+NEWS_DOMAINS = "data/domains.txt"
 NEWS_DIR = OUTPUT_DIR + 'news/'
+
 NEWS_FEATURE_DIR = OUTPUT_DIR + 'news/features/'
+
+BUCKET_NAME = os.getenv("BUCKET_NAME", "wikicite-1")
+BUCKET_PATH = os.getenv("BUCKET_PATH", INPUT_DIR)
 
 # We will store partial results in files that reuse wiki dump file extensions, i.e., for
 # enwiki-20230220-pages-articles1.xml-p1p41242.bz2 suffix = "-articles1.xml-p1p41242"
 
 # For running on GCloud, a list of files can be iterated through as follows
 def get_files_from_bucket():
-    BUCKET_NAME = os.getenv("BUCKET_NAME", "wikicite-1")
-    BUCKET_PATH = os.getenv("BUCKET_PATH", INPUT_DIR)
     storage_client = storage.Client()
     bucket = storage_client.bucket(BUCKET_NAME)
     content_list = list(bucket.list_blobs(prefix=f"{BUCKET_PATH}/"))
@@ -623,16 +639,18 @@ for index__, f_in in enumerate(file_paths):
         # 3 ***Labelled datasets for classifier training***
 
         f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
+        f_book_journal_ext = PROJECT_HOME + BOOK_JOURNAL_DIR_EXT + ext + 'book_journal_citations' + suffix + '.parquet'
         f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
         # f_news_features = PROJECT_HOME + NEWS_FEATURE_DIR + ext + 'news_citation_features' + suffix + '.parquet'
 
         # get_book_journal_features(f_feature_ids, f_book_journal)
         # get_book_journal_features(f_feature_ids, f_book_journal)
-        # get_newspaper_citations(f_separated, f_news)
-        # get_selected_features(f_base, f_news, f_news_features)
 
         # NK label news in the file with citations without context/auxiliary features
-        get_newspaper_citations(f_book_journal, f_news, '../news/domains.txt')
+        # The script can run on f_book_journal or f_book_journal_ext produced by the lookup.py
+        # The latter just has an extra column with acquired identifiers
+
+        get_newspaper_citations(f_book_journal, f_news, NEWS_DOMAINS)
 
         # 4 ***Lookout to equip
         # Run lookout.py
