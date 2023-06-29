@@ -8,8 +8,14 @@ Folder "scripts" contains scripts that run on Python 3 in the environment with u
  - process_data.py combines all data processing functions related to citation extraction and dataset preparation
  - train_citation_classifier.py deals with labelled dataset preparation and classifier training, as described in 
    (https://arxiv.org/abs/2007.07022)   
- - predict_citations.py allows users to classify extracted citations to chosen categories (book, journal, or web).
-
+ - predict_citations.py allows users to classify extracted citations to chosen categories (book, journal, or web). 
+   <small>
+   
+   This script is retained for compatibility with the earlier version of the software. 
+   We advocate the use of a simple deterministic classifier that labels citations as 'book', 'journal', 'news', or 'other', 
+   as explained further in this document.  
+   </small>
+   
 Scripts can be executed locally or in a cloud-based environment (tested on a GCloud dataproc cluster).
 
 ## Configuration
@@ -30,6 +36,7 @@ Several sub-directories are used for intermediate result output:
             'Edition', 'Pages', 'Chron', 'Issue', 'Volume', 'TitleType']
 
   Steps 3-6 can be used to extract context in which the citations were used in the article:
+
   3. content - contains extracted citations [id, 'title' -> 'page_title', 'revision.text' -> 'content']
   4. base - contains citations with context features ['id', 'page_title', 'citations_features'].  
   5. features - complete dataset: merges generic template features with context features, fields ['total_words', 'neighboring_words', 'neigboring_tags'] 
@@ -126,7 +133,8 @@ Several sub-directories are used for intermediate result output:
    4. Github projects [news_domain_labeled](https://github.com/vegetable68/news_domain_labeled) and  
       [us-news-domains](https://github.com/ercexpo/us-news-domains) assembled list of 3976 and 5000 news domains, respectively.
    
-We join top domains from the above resources into a set and classify a citation with given URL as news if it's top domain is in this set.
+We join top domains from the above resources into a set and classify a citation with given URL as news if it's top domain 
+is in this set (containing 22646 entries in total).
       
 ## Lookup
    Citations that were categorized as 'other' due to the absence of identifiers may still be valid references to books 
