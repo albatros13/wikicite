@@ -613,18 +613,18 @@ def get_files_from_disk():
 file_paths, extensions = get_files_from_disk()
 for index__, f_in in enumerate(file_paths):
     suffix = extensions[index__]
-    if suffix and index__==0:
+    if suffix:
         # 1 ***Citation extraction***
 
-        # f_citations = PROJECT_HOME + CITATIONS_DIR + ext + 'citations' + suffix + '.parquet'
-        # f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
-        # f_minimal = PROJECT_HOME + MINIMAL_DIR + ext + 'minimal' + suffix + '.parquet'
+        f_citations = PROJECT_HOME + CITATIONS_DIR + ext + 'citations' + suffix + '.parquet'
+        f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
+        f_minimal = PROJECT_HOME + MINIMAL_DIR + ext + 'minimal' + suffix + '.parquet'
 
-        # get_data(f_in, f_citations)
-        # get_generic_tmpl(f_citations, f_separated)
-        # get_minimal_dataset(f_separated, f_minimal)
+        get_data(f_in, f_citations)
+        get_generic_tmpl(f_citations, f_separated)
+        get_minimal_dataset(f_separated, f_minimal)
 
-        # 2. ***Adding citation context*** (optional, used for classifier training)
+        # 2. ***Adding citation context*** (optional, used to get context for classifier training)
 
         # f_content = PROJECT_HOME + CONTENT_DIR + ext + 'citations_content' + suffix + '.parquet'
         # f_base = PROJECT_HOME + BASE_DIR + ext + 'base_features' + suffix + '.parquet'
@@ -643,8 +643,7 @@ for index__, f_in in enumerate(file_paths):
         f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
         # f_news_features = PROJECT_HOME + NEWS_FEATURE_DIR + ext + 'news_citation_features' + suffix + '.parquet'
 
-        # get_book_journal_features(f_feature_ids, f_book_journal)
-        # get_book_journal_features(f_feature_ids, f_book_journal)
+        get_book_journal_features(f_minimal, f_book_journal)
 
         # NK label news in the file with citations without context/auxiliary features
         # The script can run on f_book_journal or f_book_journal_ext produced by the lookup.py
