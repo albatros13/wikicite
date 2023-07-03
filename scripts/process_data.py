@@ -608,9 +608,8 @@ def get_files_from_disk():
 
 
 # file_paths, extensions = get_files_from_bucket()
-
-
 file_paths, extensions = get_files_from_disk()
+
 for index__, f_in in enumerate(file_paths):
     suffix = extensions[index__]
     if suffix:
