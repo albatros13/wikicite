@@ -63,7 +63,7 @@ Several sub-directories are used for intermediate result output:
      (context) features. 
      
 ## Running data processing script on GCloud
-  The script can be executed on PySpark as described S. Harshdeep in the original project wiki.
+  The script can be executed on PySpark as described by S. Harshdeep in the original project wiki.
   Here we provide instructions for configuring a Google Cloud Dataproc cluster for dataset processing.
 
   1. Create a project following generic instructions as in https://developers.google.com/workspace/guides/create-project. 
