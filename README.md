@@ -33,7 +33,7 @@ Scripts can be executed locally or in a cloud-based environment (tested on a GCl
 
 - Set PROJECT_HOME to point to your home location, e.g., GCloud bucket `gs://wikicite-1/`. 
 - Set INPUT_DIR to the relative path to the directory containing Wikipedia dumps for parsing, e.g., `data/dumps`.
-- Set INPUT_OUT to the output folder, e.g., `data/`. 
+- Set OUTPUT_DIR to the output folder, e.g., `data/`. 
 
 We use constant `ext` to indicate which language we are working with, it is added as prefix to output file names. 
 
