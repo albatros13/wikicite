@@ -8,6 +8,8 @@ import re
 from nltk import pos_tag
 import mwparserfromhell
 from wikiciteparser.parser import parse_citation_template
+# NK TODO add translation from other languages
+from wikiciteparser.translator import translate_and_parse_citation_template
 import tldextract
 from google.cloud import storage
 
@@ -108,16 +110,20 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
                                      expr('substring(type_of_citation, 2, length(type_of_citation))'))
 
     # NK unique citation types that did not get included to the templates
-    # citation_types = citations.select('type_of_citation').distinct()
+    citation_types = citations.select('type_of_citation').distinct()
+    # print("Citation types:", citation_types['type_of_citation'])
+
+    citations = citations.limit(1000)
+
     # accepted = citation_types.filter((citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
     # print("Accepted citation types:", accepted.collect())
     # rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
     # print("Rejected citation types:", rejected.collect())
 
-    print("Before matching with templates:", citations.count(), len(citations.columns))
-    # NK what is the number of citations before filtering?
-    citations = citations.filter(citations['type_of_citation'].isin(CITATION_TEMPLATES))
-    print("After matching with templates:", citations.count(), len(citations.columns))
+    # print("Before matching with templates:", citations.count(), len(citations.columns))
+    # # NK what is the number of citations before filtering?
+    # citations = citations.filter(citations['type_of_citation'].isin(CITATION_TEMPLATES))
+    # print("After matching with templates:", citations.count(), len(citations.columns))
 
     def check_if_balanced(my_string):
         """
@@ -148,7 +154,8 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
             template = wikicode.filter_templates()[0]
         except IndexError:
             return not_parsable
-        parsed_result = parse_citation_template(template, lang)
+        # parsed_result = parse_citation_template(template, lang)
+        parsed_result = translate_and_parse_citation_template(template, lang)
 
         # NK This is a fix for potentially different field types: array vs string
         if "Authors" in parsed_result:
@@ -552,7 +559,8 @@ def get_selected_features(file_in1, file_in2, file_out):
 
 # Files
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
-ext = "en_"
+# ext = "en_"
+ext = "it_"
 
 INPUT_DIR = "data/parts/dumps"
 OUTPUT_DIR = 'data/parts/'
@@ -579,6 +587,7 @@ BUCKET_PATH = os.getenv("BUCKET_PATH", INPUT_DIR)
 
 # We will store partial results in files that reuse wiki dump file extensions, i.e., for
 # enwiki-20230220-pages-articles1.xml-p1p41242.bz2 suffix = "-articles1.xml-p1p41242"
+
 
 # For running on GCloud, a list of files can be iterated through as follows
 def get_files_from_bucket():
@@ -619,9 +628,10 @@ for index__, f_in in enumerate(file_paths):
         f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
         f_minimal = PROJECT_HOME + MINIMAL_DIR + ext + 'minimal' + suffix + '.parquet'
 
-        get_data(f_in, f_citations)
-        get_generic_tmpl(f_citations, f_separated)
-        get_minimal_dataset(f_separated, f_minimal)
+        # get_data(f_in, f_citations)
+        lang = ext[0:2]
+        get_generic_tmpl(f_citations, f_separated, lang)
+        # get_minimal_dataset(f_separated, f_minimal)
 
         # 2. ***Adding citation context*** (optional, used to get context for classifier training)
 
@@ -637,18 +647,18 @@ for index__, f_in in enumerate(file_paths):
 
         # 3 ***Labelled datasets for classifier training***
 
-        f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
-        f_book_journal_ext = PROJECT_HOME + BOOK_JOURNAL_DIR_EXT + ext + 'book_journal_citations' + suffix + '.parquet'
-        f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
+        # f_book_journal = PROJECT_HOME + BOOK_JOURNAL_DIR + ext + 'book_journal_citations' + suffix + '.parquet'
+        # f_book_journal_ext = PROJECT_HOME + BOOK_JOURNAL_DIR_EXT + ext + 'book_journal_citations' + suffix + '.parquet'
+        # f_news = PROJECT_HOME + NEWS_DIR + ext + 'news_citations' + suffix + '.parquet'
         # f_news_features = PROJECT_HOME + NEWS_FEATURE_DIR + ext + 'news_citation_features' + suffix + '.parquet'
 
-        get_book_journal_features(f_minimal, f_book_journal)
+        # get_book_journal_features(f_minimal, f_book_journal)
 
         # NK label news in the file with citations without context/auxiliary features
         # The script can run on f_book_journal or f_book_journal_ext produced by the lookup.py
         # The latter just has an extra column with acquired identifiers
 
-        get_newspaper_citations(f_book_journal, f_news, NEWS_DOMAINS)
+        # get_newspaper_citations(f_book_journal, f_news, NEWS_DOMAINS)
 
         # 4 ***Lookout to equip
         # Run lookout.py

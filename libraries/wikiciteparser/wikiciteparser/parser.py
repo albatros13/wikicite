@@ -8,10 +8,12 @@ import importlib
 lua = lupa.LuaRuntime()
 luacode = ''
 luafilepath = os.path.join(os.path.dirname(__file__), 'cs1.lua')
+
 # NK
 # with open(luafilepath, 'r') as f:
 with open(luafilepath, 'r', encoding='utf-8') as f:
     luacode = f.read()
+
 
 # MediaWiki utilities simulated by Python wrappers
 def lua_to_python_re(regex):
@@ -63,10 +65,7 @@ def is_int(val):
         return False
 
 
-wrapped_type = lua.globals().type
-
-
-def toPyDict(lua_val):
+def toPyDict(lua_val, wrapped_type):
     """
     Converts a lua dict to a Python one
     """
@@ -77,7 +76,7 @@ def toPyDict(lua_val):
         dct = {}
         lst = []
         for k, v in sorted(lua_val.items(), key=(lambda x: x[0])):
-            vp = toPyDict(v)
+            vp = toPyDict(v, wrapped_type)
             if not vp:
                 continue
             if is_int(k):
@@ -104,11 +103,14 @@ def parse_citation_dict(arguments, template_name='citation'):
     if template_name in ['Gazette', 'Harvnb', 'NRISref', 'GNIS', 'GEOnet3', 'Policy', 'NHLE', 'England']:
         template_name = template_name.lower()
 
-    arguments['CitationClass'] = template_name
-    if 'vauthors' in arguments:
-        arguments['authors'] = arguments.pop('vauthors')
-    if 'veditors' in arguments:
-        arguments['editors'] = arguments.pop('veditors')
+    if isinstance(arguments, dict):
+        arguments['CitationClass'] = arguments['CitationClass'] or template_name
+        if 'vauthors' in arguments:
+            arguments['authors'] = arguments.pop('vauthors')
+        if 'veditors' in arguments:
+            arguments['editors'] = arguments.pop('veditors')
+    else:
+        print(type(arguments), arguments)
 
     lua_table = lua.table_from(arguments)
     try:
@@ -119,10 +121,11 @@ def parse_citation_dict(arguments, template_name='citation'):
                 text_split,
                 nowiki)
     except Exception as e:
-        print("Something wrong with Lua: ", template_name, arguments)
+        print("Error in calling Lua code from parser: ", template_name, arguments)
         return {'Title': 'Citation generic template not possible'}
 
-    return toPyDict(lua_result)
+    wrapped_type = lua.globals().type
+    return toPyDict(lua_result, wrapped_type)
 
 
 def params_to_dict(params):
