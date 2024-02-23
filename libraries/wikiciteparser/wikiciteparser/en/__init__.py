@@ -3,15 +3,16 @@
 # taken from https://en.wikipedia.org/wiki/Help:Citation_Style_1
 citation_template_names = set([
     'Citation',
+    'Cite arXiv',
     'Cite AV media',
     'Cite AV media notes',
     'Cite book',
     'Cite conference',
-    'Cite DVD notes',
     'Cite encyclopedia',
     'Cite episode',
     'Cite interview',
     'Cite journal',
+    'Cite magazine',
     'Cite mailing list',
     'Cite map',
     'Cite news',
@@ -22,23 +23,7 @@ citation_template_names = set([
     'Cite serial',
     'Cite sign',
     'Cite speech',
-    'Cite techreport',
+    'Cite tech report',
     'Cite thesis',
-    'Cite web',
-    'Cite arXiv',
-    'London Gazette',
-    'Harvnb',
-    'Harvard citation no brackets',
-    'NRISref',
-    'Cite gnis',
-    'GNIS',
-    'GEOnet3',
-    'Timatic Visa Policy',
-    'Soccerbase season',
-    'Cite sports-reference',
-    'NHLE',
-    'National Heritage List for England'
-    # TODO more could be added,
-    # see https://en.wikipedia.org/wiki/
-    #    Category:Citation_Style_1_specific-source_templates
+    'Cite web'
     ])

@@ -40,11 +40,15 @@ sql_context = SQLContext(sc)
 # import nltk
 # nltk.download('popular')
 
-CITATION_TEMPLATES = {'citation', 'cite arxiv', 'cite av media', 'cite av media notes', 'cite book', 'cite conference',
+CITATION_TEMPLATES ={
+    "en": {'citation', 'cite arxiv', 'cite av media', 'cite av media notes', 'cite book', 'cite conference',
                       'cite dvd notes', 'cite encyclopedia', 'cite episode', 'cite interview', 'cite journal',
                       'cite mailing list', 'cite map', 'cite news', 'cite newsgroup', 'cite podcast',
-                      'cite press release', 'cite report', 'cite serial', 'cite sign', 'cite speech', 'cite techreport',
-                      'cite thesis', 'cite web'}
+                      'cite press release', 'cite report', 'cite serial', 'cite sign', 'cite speech', 'cite tech report',
+                      'cite thesis', 'cite web'},
+    "it": {'cita', 'cita libro', 'cita pubblicazione', 'cita web', 'cita legge italiana',
+           'cita brevetto', 'cita conferenza', 'cita news', 'cita video', 'cita tv'}
+    }
 
 
 def get_data(file_in, file_out):
@@ -110,19 +114,18 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
                                      expr('substring(type_of_citation, 2, length(type_of_citation))'))
 
     # NK unique citation types that did not get included to the templates
-    citation_types = citations.select('type_of_citation').distinct()
+    # citation_types = citations.select('type_of_citation').distinct()
     # print("Citation types:", citation_types['type_of_citation'])
 
-    citations = citations.limit(1000)
-
-    # accepted = citation_types.filter((citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
+    # accepted = citation_types.filter((citation_types['type_of_citation'].isin(CITATION_TEMPLATES[lang])))
     # print("Accepted citation types:", accepted.collect())
-    # rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(CITATION_TEMPLATES)))
+    # rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(CITATION_TEMPLATES[lang])))
     # print("Rejected citation types:", rejected.collect())
 
     # print("Before matching with templates:", citations.count(), len(citations.columns))
     # # NK what is the number of citations before filtering?
-    # citations = citations.filter(citations['type_of_citation'].isin(CITATION_TEMPLATES))
+    if lang in CITATION_TEMPLATES:
+        citations = citations.filter(citations['type_of_citation'].isin(CITATION_TEMPLATES[lang]))
     # print("After matching with templates:", citations.count(), len(citations.columns))
 
     def check_if_balanced(my_string):
