@@ -626,7 +626,7 @@ for index__, f_in in enumerate(file_paths):
         f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
         f_minimal = PROJECT_HOME + MINIMAL_DIR + ext + 'minimal' + suffix + '.parquet'
 
-        get_data(f_in, f_citations)
+        # get_data(f_in, f_citations)
         lang = ext[0:2]
         print("Language", lang)
         get_generic_tmpl(f_citations, f_separated, lang)

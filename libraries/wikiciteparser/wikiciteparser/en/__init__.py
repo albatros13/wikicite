@@ -26,4 +26,4 @@ citation_template_names = set([
     'cite tech report',
     'cite thesis',
     'cite web'
-    ])
+])

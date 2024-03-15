@@ -109,7 +109,13 @@ def parse_citation_dict(arguments, citation_type='citation'):
         if 'veditors' in arguments:
             arguments['editors'] = arguments.pop('veditors')
     else:
-        print(type(arguments), arguments)
+        if citation_type == "web" and len(arguments) > 0:
+            res = {'CitationClass': 'web', 'url': arguments[0]}
+            if len(arguments) > 1:
+                res['Title'] = arguments[1]
+            arguments = res
+        else:
+            print(citation_type, type(arguments), arguments)
 
     lua_table = lua.table_from(arguments)
     try:
@@ -163,8 +169,6 @@ def parse_citation_template(template, lang='en'):
     """
     if not template.name:
         return {}
-
-    # print("Parsing: ", lang, template)
 
     template_name = template.name.strip().lower()
     split_template_name = template_name.split(' ')
