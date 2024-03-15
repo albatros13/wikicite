@@ -1711,63 +1711,95 @@ implements {{Web kaynağı}} (:tr:Şablon:Web_kaynağı)
     --  Main: choose a translation method
 
     local methods = {
-		Cytuj_pl = citation_pl,													-- pl:Szablon:Cytuj
-		bog_da = cite_book_da,												    -- da:Skabelon:Kilde bog
-		Literatur_de = cite_book_de,	       								    -- de:Vorlage:Literatur
-		libro_es = cite_book_es,												-- es:Plantilla:Cita libro
-		Kirjaviite_fi = cite_book_fi,											-- fi:Malline:Kirjaviite
-		Ouvrage_fr = cite_book_fr,												-- fr:Modèle:Ouvrage
-		libro_it = cite_book_it,												-- it:Template:Cita libro
-		boek_nl = cite_book_nl,												-- nl:Sjabloon:Citeer boek
-		bok_no = cite_book_no,										  		    -- no:Mal:Kilde bok
- 		["książkę_pl"] = cite_book_pl,												-- pl:Szablon:Cytuj książkę
-		livro_pt = cite_book_pt,												-- pt:Predefinição:citar livro
-		Bokref_sv = cite_book_sv,												-- sv:Mall:Bokref
- 		["Şablon_tr"] = cite_book_tr,												-- tr:Şablon:
 
-		tidsskrift_da = cite_journal_da,										-- da:Skabelon:Kilde tidsskrift / da:Skabelon:Kilde artikel (da.wiki prefers da:Skabelon:cite journal)
-		artikel_da = cite_journal_da,											-- da:Skabelon:Kilde tidsskrift / da:Skabelon:Kilde artikel (da.wiki prefers da:Skabelon:cite journal)
- 		["publicación_es"] = cite_journal_es,											-- es:Plantilla:Cita publicación
-		Lehtiviite_fi = cite_journal_fi,											-- fi:Malline:Lehtiviite
-		Article_fr = cite_journal_fr,											-- fr:Modèle:Article
-		pubblicazione_it = cite_journal_it,											-- it:Template:Cita pubblicazione
-		journal_nl = cite_journal_nl,											-- nl:Sjabloon:Citeer journal
-		artikkel_no = cite_journal_no,											-- no:Mal:Kilde artikkel
-		pismo_pl = cite_journal_pl,											-- pl:Szablon:Cytuj pismo
- 		["periódico_pt"] = cite_journal_pt,											-- pt:Predefinição:citar periódico
-		Tidskriftsref_sv = cite_journal_sv,											-- sv:Mall:Tidskriftsref
-		Akademik_tr = cite_journal_tr,											-- tr:Şablon:Akademik dergi kaynağı
-
+-- Catalan
  		["Ref-publicació_ca"] = cite_news_ca,												-- ca:Plantilla:Ref-publicació
-		news_es = cite_news_es,												-- en:Template:Cite news/Spanish; for cita news see cite_news_es_it()
-		news_it = cite_news_it,												-- en:Template:Cite news/Italian; for cita news see cite_news_es_it()
-		avis_no = cite_news_no,												-- no:Mal:Kilde avis
-		jornal_pt = cite_news_pt,												-- pt:Predefinição:citar jornal
-
 		["ref-web_ca"] = cite_web_ca,													-- ca:Plantilla:Ref-web
+
+-- Danish
+		bog_da = cite_book_da,												    -- da:Skabelon:Kilde bog
 		web_da = cite_web_da,													-- da:Skabelon:Kilde www or da:Skabelon:Cite web
 		www_da = cite_web_da,													-- da:Skabelon:Kilde www or da:Skabelon:Cite web
-		Internetquelle_de = cite_web_de,													-- de:Vorlage:Internetquelle
-		web_es = cite_web_es,													-- es:Plantilla:Cita web
-		Verkkoviite_fi = cite_web_fi,													-- fi:Malline:Verkkoviite
-		web_fr = cite_web_fr,													-- fr:Modèle:Lien web
-		web_it = cite_web_it,													-- it:Template:Cita web
+		tidsskrift_da = cite_journal_da,										-- da:Skabelon:Kilde tidsskrift / da:Skabelon:Kilde artikel (da.wiki prefers da:Skabelon:cite journal)
+		artikel_da = cite_journal_da,											-- da:Skabelon:Kilde tidsskrift / da:Skabelon:Kilde artikel (da.wiki prefers da:Skabelon:cite journal)
+
+-- Dutch
+		boek_nl = cite_book_nl,												-- nl:Sjabloon:Citeer boek
+		journal_nl = cite_journal_nl,											-- nl:Sjabloon:Citeer journal
 		web_nl = cite_web_nl,													-- nl:Sjabloon:Citeer web
+
+-- German
+		Literatur_de = cite_book_de,	       								    -- de:Vorlage:Literatur
+		Internetquelle_de = cite_web_de,													-- de:Vorlage:Internetquelle
+
+-- Finnish
+		Lehtiviite_fi = cite_journal_fi,											-- fi:Malline:Lehtiviite
+		Kirjaviite_fi = cite_book_fi,											-- fi:Malline:Kirjaviite
+		Verkkoviite_fi = cite_web_fi,													-- fi:Malline:Verkkoviite
+
+-- French
+		Article_fr = cite_journal_fr,											-- fr:Modèle:Article
+		Ouvrage_fr = cite_book_fr,												-- fr:Modèle:Ouvrage
+		web_fr = cite_web_fr,													-- fr:Modèle:Lien web
+
+-- Italian
+		libro_it = cite_book_it,												-- it:Template:Cita libro
+		pubblicazione_it = cite_journal_it,											-- it:Template:Cita pubblicazione
+		news_it = cite_news_it,												-- en:Template:Cite news/Italian; for cita news see cite_news_es_it()
+		web_it = cite_web_it,													-- it:Template:Cita web
+
+-- Norwegian
+		bok_no = cite_book_no,										  		    -- no:Mal:Kilde bok
+		artikkel_no = cite_journal_no,											-- no:Mal:Kilde artikkel
+		avis_no = cite_news_no,												-- no:Mal:Kilde avis
 		www_no = cite_web_no,													-- no:Mal:Kilde www
- 		["stronę_pl"] = cite_web_pl,													-- pl:Szablon:Cytuj stronę
+
+-- Polish
+    	Cytuj_pl = citation_pl,													-- pl:Szablon:Cytuj
+		["książkę_pl"] = cite_book_pl,											-- pl:Szablon:Cytuj książkę
+ 		["stronę_pl"] = cite_web_pl,										    -- pl:Szablon:Cytuj stronę
+		pismo_pl = cite_journal_pl,											-- pl:Szablon:Cytuj pismo
+
+-- Portuguese
+		livro_pt = cite_book_pt,												-- pt:Predefinição:citar livro
+		jornal_pt = cite_news_pt,												-- pt:Predefinição:citar jornal
 		web_pt = cite_web_pt,													-- pt:Predefinição:citar web
+ 		["periódico_pt"] = cite_journal_pt,											-- pt:Predefinição:citar periódico
+
+-- Spanish
+		libro_es = cite_book_es,												-- es:Plantilla:Cita libro
+ 		["publicación_es"] = cite_journal_es,											-- es:Plantilla:Cita publicación
+		news_es = cite_news_es,												-- en:Template:Cite news/Spanish; for cita news see cite_news_es_it()
+		web_es = cite_web_es,													-- es:Plantilla:Cita web
+
+-- Swedish
+		Bokref_sv = cite_book_sv,												-- sv:Mall:Bokref
+		Tidskriftsref_sv = cite_journal_sv,											-- sv:Mall:Tidskriftsref
 		web_sv = cite_web_sv,													-- sv:Mall:Webbref
-		Webref_tr = cite_web_tr
-	}
 
+-- Turkish
+ 		["Şablon_tr"] = cite_book_tr,												-- tr:Şablon:
+		Akademik_tr = cite_journal_tr,											-- tr:Şablon:Akademik dergi kaynağı
+		webref_tr = cite_web_tr,
 
-    local choice = template_name .. '_' .. lang;
+-- Russian
+        ['Книга'] = cite_book_ru
+
+}
+
+    local choice = template_name:lower() .. '_' .. lang;
 --     print("Method name: ", choice)
     method = methods[choice];
     if method then
         return method(citation);
     else
-        print('Lua translator failed to find suitable method ('..choice..')');
+        --Unknown template, try general
+        method = methods['_cite_'..lang]
+        if method then
+            return method(citation, template_name);
+        else
+            print('Lua translator failed to find suitable method ('..choice..')');
+        end
     end
     return citation;
 end

@@ -8,11 +8,8 @@ import re
 from nltk import pos_tag
 import mwparserfromhell
 from wikiciteparser.parser import parse_citation_template
-# NK TODO add translation from other languages
-from wikiciteparser.translator import translate_and_parse_citation_template
 import tldextract
 from google.cloud import storage
-
 
 os.environ["PYSPARK_SUBMIT_ARGS"] = " --packages com.databricks:spark-xml_2.12:0.15.0 pyspark-shell"
 os.environ["JAVA_HOME"] = "C:/Program Files/Java/jdk-17/"
@@ -40,19 +37,9 @@ sql_context = SQLContext(sc)
 # import nltk
 # nltk.download('popular')
 
-CITATION_TEMPLATES ={
-    "en": {'citation', 'cite arxiv', 'cite av media', 'cite av media notes', 'cite book', 'cite conference',
-                      'cite dvd notes', 'cite encyclopedia', 'cite episode', 'cite interview', 'cite journal',
-                      'cite mailing list', 'cite map', 'cite news', 'cite newsgroup', 'cite podcast',
-                      'cite press release', 'cite report', 'cite serial', 'cite sign', 'cite speech', 'cite tech report',
-                      'cite thesis', 'cite web'},
-    "it": {'cita', 'cita libro', 'cita pubblicazione', 'cita web', 'cita legge italiana',
-           'cita brevetto', 'cita conferenza', 'cita news', 'cita video', 'cita tv'}
-    }
-
 
 def get_data(file_in, file_out):
-    print("Step 1: Getting citations from XML dump...")
+    print("Step A-1: Getting citations from XML dump...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
 
@@ -105,7 +92,7 @@ def get_data(file_in, file_out):
 
 
 def get_generic_tmpl(file_in, file_out, lang='en'):
-    print("Step 4: Converting citations to generic template...")
+    print("Step A-2: Converting citations to generic template...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
 
@@ -116,17 +103,26 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
     # NK unique citation types that did not get included to the templates
     # citation_types = citations.select('type_of_citation').distinct()
     # print("Citation types:", citation_types['type_of_citation'])
-
-    # accepted = citation_types.filter((citation_types['type_of_citation'].isin(CITATION_TEMPLATES[lang])))
+    
+    import importlib
+    lang_module = importlib.import_module('.' + lang, package='wikiciteparser')
+    if not lang_module:
+        print("Can't process language: ", lang)
+        return        
+    citation_templates = lang_module.citation_template_names
+    if lang != 'en':
+        en_module = importlib.import_module('.en', package='wikiciteparser')
+        if en_module:
+            citation_templates = citation_templates.union(en_module.citation_template_names)
+        
+    # accepted = citation_types.filter((citation_types['type_of_citation'].isin(citation_templates)))
     # print("Accepted citation types:", accepted.collect())
-    # rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(CITATION_TEMPLATES[lang])))
+    # rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(citation_templates)))
     # print("Rejected citation types:", rejected.collect())
 
-    # print("Before matching with templates:", citations.count(), len(citations.columns))
-    # # NK what is the number of citations before filtering?
-    if lang in CITATION_TEMPLATES:
-        citations = citations.filter(citations['type_of_citation'].isin(CITATION_TEMPLATES[lang]))
-    # print("After matching with templates:", citations.count(), len(citations.columns))
+    print("Before matching with templates:", citations.count(), len(citations.columns))
+    citations = citations.filter(citations['type_of_citation'].isin(citation_templates))
+    print("After matching with templates:", citations.count(), len(citations.columns))
 
     def check_if_balanced(my_string):
         """
@@ -143,7 +139,7 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
     def list_to_str(items):
         return ", ".join([str(a) for a in items])
 
-    def get_generic_template(citation):
+    def get_generic_template(citation, template_name):
         """
             Get generic template of a citation using the wikiciteparser library.
             :param: citation - according to a particular format as described in CITATION_TEMPLATES
@@ -157,8 +153,8 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
             template = wikicode.filter_templates()[0]
         except IndexError:
             return not_parsable
-        # parsed_result = parse_citation_template(template, lang)
-        parsed_result = translate_and_parse_citation_template(template, lang)
+
+        parsed_result = parse_citation_template(template, lang)
 
         # NK This is a fix for potentially different field types: array vs string
         if "Authors" in parsed_result:
@@ -182,7 +178,7 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
             Get each article's generic templated citations with their id, title and type.
             :param line: a row from the dataframe generated from get_data.py.
         """
-        citation_dict = get_generic_template(line.citations)
+        citation_dict = get_generic_template(line.citations, line.type_of_citation)
         return Row(
             citations=line.citations,
             id=line.id,
@@ -220,7 +216,7 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
 
 
 def get_minimal_dataset(file_in, file_out):
-    print("Step final: Getting dataset features...")
+    print("Step A-3: Getting dataset features...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     dataset = sql_context.read.parquet(file_in)
@@ -239,7 +235,7 @@ def get_minimal_dataset(file_in, file_out):
 
 
 def get_content(file_in, file_out):
-    print("Step 2: Getting content from XML dump...")
+    print("Step B-1: Getting content from XML dump...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
 
@@ -253,7 +249,7 @@ def get_content(file_in, file_out):
 
 
 def extract_nlp_features(file_in, file_out):
-    print("Step 3: Extracting NLP features...")
+    print("Step B-2: Extracting NLP features...")
 
     TOTAL_NEIGHBORING_WORDS = 40
     PUNCTUATION_TO_BE_REMOVED = '"\[\\]^`|~'
@@ -310,7 +306,7 @@ def extract_nlp_features(file_in, file_out):
     
 
 def get_dataset_features(file_in1, file_in2, file_out):
-    print("Step 5: Getting dataset features...")
+    print("Step B-3: Getting dataset features...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     base_features = sql_context.read.parquet(file_in1)
@@ -356,7 +352,7 @@ def get_dataset_features(file_in1, file_in2, file_out):
 
 # Select entries with won-empty ID_list
 def filter_with_ids(file_in, file_out):
-    print("Step 6a: Selecting citations with identifiers...")
+    print("Step B-4: Selecting citations with identifiers...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     citations_features = sql_context.read.parquet(file_in)
@@ -371,7 +367,7 @@ def filter_with_ids(file_in, file_out):
     
 
 def get_book_journal_features(file_in, file_out):
-    print("Step 6b: Getting book and journal citations...")
+    print("Step C-1: Getting book and journal citations...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     citation_with_ids = sql_context.read.parquet(file_in)
@@ -472,7 +468,7 @@ def get_book_journal_features(file_in, file_out):
 
 
 def get_newspaper_citations(file_in, file_out, file_domains):
-    print("Step 7: Getting newspaper citations...")
+    print("Step C-2: Getting newspaper citations...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     dataset = sql_context.read.parquet(file_in)
@@ -533,7 +529,7 @@ def get_newspaper_citations(file_in, file_out, file_domains):
     
 
 def get_selected_features(file_in1, file_in2, file_out):
-    print("Step 8: Merging citations with context...")
+    print("Step D-1: Merging citations with context...")
 
     sql_context.setConf('spark.sql.parquet.compression.codec', 'snappy')
     features = sql_context.read.parquet(file_in1)
@@ -562,8 +558,6 @@ def get_selected_features(file_in1, file_in2, file_out):
 
 # Files
 PROJECT_HOME = 'c:///users/natal/PycharmProjects/cite-classifications-wiki/'
-# ext = "en_"
-ext = "it_"
 
 INPUT_DIR = "data/parts/dumps"
 OUTPUT_DIR = 'data/parts/'
@@ -626,15 +620,17 @@ for index__, f_in in enumerate(file_paths):
     suffix = extensions[index__]
     if suffix:
         # 1 ***Citation extraction***
+        ext = "it_"
 
         f_citations = PROJECT_HOME + CITATIONS_DIR + ext + 'citations' + suffix + '.parquet'
         f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
         f_minimal = PROJECT_HOME + MINIMAL_DIR + ext + 'minimal' + suffix + '.parquet'
 
-        # get_data(f_in, f_citations)
+        get_data(f_in, f_citations)
         lang = ext[0:2]
+        print("Language", lang)
         get_generic_tmpl(f_citations, f_separated, lang)
-        # get_minimal_dataset(f_separated, f_minimal)
+        get_minimal_dataset(f_separated, f_minimal)
 
         # 2. ***Adding citation context*** (optional, used to get context for classifier training)
 

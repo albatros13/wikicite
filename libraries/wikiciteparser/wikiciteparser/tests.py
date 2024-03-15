@@ -3,7 +3,6 @@ from __future__ import unicode_literals
 
 import unittest
 from wikiciteparser.parser import *
-from wikiciteparser.translator import *
 
 # from translator import translate_and_parse_citation_template
 
@@ -141,7 +140,7 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(p['Title'],
                          '\u0414\u043e\u0440\u043e\u0433\u0438 \u0446\u0430\u0440\u0435\u0439 (Roads of Emperors)')
 
-    @unittest.skip("Not relevant for multi-language parsing")
+    # @unittest.skip("Not relevant for multi-language parsing")
     def test_mwtext(self):
         # taken from https://en.wikipedia.org/wiki/Joachim_Lambek
         import mwparserfromhell
@@ -171,14 +170,27 @@ class ParsingTests(unittest.TestCase):
     #                 {{cite web|first1=Peter|last1=Caranicas|access-date=November 7, 2018|title=ILM Launches TV Unit to Serve Episodic and Streaming Content|url=https://variety.com/2018/artisans/news/george-lucas-star-wars-ilm-launches-tv-unit-1203022007/|website=Variety|date=November 7, 2018}}
 
 
-    def test_translate(self):
+    def test_translate_it(self):
         import mwparserfromhell
         mwtext = """
                 {{cita libro | autore = Barth, F. | titolo = Ethnic groups and boundaries: The social organization of culture differences | url = https://archive.org/details/ethnicgroupsboun0000unse | lingua = en | editore = Little Brown & Co. | città = Boston | anno = 1969}}
                 """
         wikicode = mwparserfromhell.parse(mwtext)
         for tpl in wikicode.filter_templates():
-            parsed = translate_and_parse_citation_template(tpl, 'it')
+            parsed = parse_citation_template(tpl, 'it')
+            print(parsed)
+            # All templates in this example are citation templates
+            self.assertIsInstance(parsed, dict)
+
+    def test_translate_nl(self):
+        import mwparserfromhell
+        mwtext = """
+                {{Citeer web|url=https://eurovision.tv/about/rules|titel=The Rules of the Contest|taal=en|werk=Eurovision.tv|archiefurl=https://web.archive.org/web/20220716003114/https://eurovision.tv/about/rules|archiefdatum=16 juli 2022}}
+                {{Citeer boek | achternaam = D Hillenius ea | titel = Spectrum Dieren Encyclopedie Deel 7 | pagina's = Pagina 2312 | datum = 1971 | uitgever = Uitgeverij Het Spectrum| ISBN = 90 274 2097 1}}
+                """
+        wikicode = mwparserfromhell.parse(mwtext)
+        for tpl in wikicode.filter_templates():
+            parsed = parse_citation_template(tpl, 'nl')
             print(parsed)
             # All templates in this example are citation templates
             self.assertIsInstance(parsed, dict)

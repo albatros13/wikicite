@@ -6,13 +6,16 @@ import mwparserfromhell
 import importlib
 
 lua = lupa.LuaRuntime()
-luacode = ''
-luafilepath = os.path.join(os.path.dirname(__file__), 'cs1.lua')
+lua_data_path = os.path.dirname(__file__) + os.sep
+print("Lua translator looking for data files in the following directory: ", lua_data_path)
 
-# NK
-# with open(luafilepath, 'r') as f:
-with open(luafilepath, 'r', encoding='utf-8') as f:
-    luacode = f.read()
+lua_parser_path = os.path.join(os.path.dirname(__file__), 'cs1.lua')
+with open(lua_parser_path, 'r', encoding='utf-8') as f:
+    lua_parser = f.read()
+
+lua_translator_path = os.path.join(os.path.dirname(__file__), 'cs1-translator.lua')
+with open(lua_translator_path, 'r', encoding='utf-8') as f:
+    lua_translator = f.read()
 
 
 # MediaWiki utilities simulated by Python wrappers
@@ -65,7 +68,7 @@ def is_int(val):
         return False
 
 
-def toPyDict(lua_val, wrapped_type):
+def to_py_dict(lua_val, wrapped_type):
     """
     Converts a lua dict to a Python one
     """
@@ -76,7 +79,7 @@ def toPyDict(lua_val, wrapped_type):
         dct = {}
         lst = []
         for k, v in sorted(lua_val.items(), key=(lambda x: x[0])):
-            vp = toPyDict(v, wrapped_type)
+            vp = to_py_dict(v, wrapped_type)
             if not vp:
                 continue
             if is_int(k):
@@ -89,22 +92,18 @@ def toPyDict(lua_val, wrapped_type):
         return lua_val
 
 
-def parse_citation_dict(arguments, template_name='citation'):
+def parse_citation_dict(arguments, citation_type='citation'):
     """
     Parses the Wikipedia citation into a python dict.
 
     :param arguments: a dictionary with the arguments of the citation template
-    :param template_name: the name of the template used (e.g. 'cite journal', 'citation', and so on)
+    :param citation_type: the name of the template used (e.g. 'cite journal', 'citation', and so on)
     :returns: a dictionary used as internal representation in wikipedia for rendering and export to other formats
     """
-    split_template_name = template_name.strip().split(' ')
-    template_name = split_template_name[-1] if len(split_template_name) > 1 else split_template_name[0]
-
-    if template_name in ['Gazette', 'Harvnb', 'NRISref', 'GNIS', 'GEOnet3', 'Policy', 'NHLE', 'England']:
-        template_name = template_name.lower()
 
     if isinstance(arguments, dict):
-        arguments['CitationClass'] = arguments['CitationClass'] or template_name
+        if 'CitationClass' not in arguments:
+            arguments['CitationClass'] = citation_type
         if 'vauthors' in arguments:
             arguments['authors'] = arguments.pop('vauthors')
         if 'veditors' in arguments:
@@ -114,18 +113,18 @@ def parse_citation_dict(arguments, template_name='citation'):
 
     lua_table = lua.table_from(arguments)
     try:
-        lua_result = lua.eval(luacode)(lua_table,
-                ustring_match,
-                ustring_len,
-                uri_encode,
-                text_split,
-                nowiki)
+        lua_result = lua.eval(lua_parser)(lua_table,
+                                          ustring_match,
+                                          ustring_len,
+                                          uri_encode,
+                                          text_split,
+                                          nowiki)
     except Exception as e:
-        print("Error in calling Lua code from parser: ", template_name, arguments)
+        print("Error in calling Lua code from parser: ", citation_type, arguments)
         return {'Title': 'Citation generic template not possible'}
 
     wrapped_type = lua.globals().type
-    return toPyDict(lua_result, wrapped_type)
+    return to_py_dict(lua_result, wrapped_type)
 
 
 def params_to_dict(params):
@@ -138,23 +137,16 @@ def params_to_dict(params):
     return dct
 
 
-def is_citation_template_name(template_name, lang='en'):
+def translate_citation(arguments, citation_type, lang):
     """
-    Is this name the name of a citation template?
-    If true, returns a normalized version of it. Otherwise, returns None
+    Translates citation to English
     """
-    if not template_name:
-        return False
+    lua_table = lua.table_from(arguments)
+    lua_result = lua.eval(lua_translator)(lua_table, lang, citation_type, lua_data_path)
+    return to_py_dict(lua_result, lua.globals().type)
 
-    try:
-        # template_name = template_name.replace('_', ' ')
-        template_name = template_name.strip()
-        template_name = template_name[0].upper()+template_name[1:]
-    except Exception as e:
-        print("Error in template_name pre-processing:", template_name)
-        print(e)
-        return False
 
+def is_citation_template_name(template_name, lang):
     lang_module = importlib.import_module('.' + lang, package='wikiciteparser')
     if template_name in lang_module.citation_template_names:
         return template_name
@@ -169,10 +161,24 @@ def parse_citation_template(template, lang='en'):
     :returns: a dict representing the template, or None if the template
         provided does not represent a citation.
     """
-    # NK
-    # name = unicode(template.name)
-    name = template.name
-    if not is_citation_template_name(name, lang):
-        # print("Not a citation template:", name)
+    if not template.name:
         return {}
-    return parse_citation_dict(params_to_dict(template.params), template_name=name)
+
+    # print("Parsing: ", lang, template)
+
+    template_name = template.name.strip().lower()
+    split_template_name = template_name.split(' ')
+    citation_type = split_template_name[-1] if len(split_template_name) > 1 else split_template_name[0]
+
+    params = None
+    if lang != 'en' and is_citation_template_name(template_name, lang):
+        params = translate_citation(params_to_dict(template.params), citation_type, lang)
+    elif is_citation_template_name(template_name, 'en'):
+        params = params_to_dict(template.params)
+
+    if params:
+        return parse_citation_dict(params, citation_type)
+    else:
+        # print("Not a citation template:", lang, template_name)
+        return {}
+
