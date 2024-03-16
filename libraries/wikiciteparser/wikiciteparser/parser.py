@@ -92,12 +92,12 @@ def to_py_dict(lua_val, wrapped_type):
         return lua_val
 
 
-def parse_citation_dict(arguments, citation_type='citation'):
+def parse_citation_dict(arguments, citation_type):
     """
     Parses the Wikipedia citation into a python dict.
 
     :param arguments: a dictionary with the arguments of the citation template
-    :param citation_type: the name of the template used (e.g. 'cite journal', 'citation', and so on)
+    :param citation_type: main part of the template name (e.g. '[cite] journal', 'citation', and so on)
     :returns: a dictionary used as internal representation in wikipedia for rendering and export to other formats
     """
 
@@ -108,9 +108,14 @@ def parse_citation_dict(arguments, citation_type='citation'):
             arguments['authors'] = arguments.pop('vauthors')
         if 'veditors' in arguments:
             arguments['editors'] = arguments.pop('veditors')
+        if citation_type == "web":
+            if '1' in arguments:
+                arguments['URL'] = arguments.pop('1')
+            if '2' in arguments:
+                arguments['Title'] = arguments.pop('2')
     else:
         if citation_type == "web" and len(arguments) > 0:
-            res = {'CitationClass': 'web', 'url': arguments[0]}
+            res = {'CitationClass': citation_type, 'URL': arguments[0]}
             if len(arguments) > 1:
                 res['Title'] = arguments[1]
             arguments = res
@@ -153,9 +158,34 @@ def translate_citation(arguments, citation_type, lang):
 
 
 def is_citation_template_name(template_name, lang):
+    """
+    Check whether template name is in the language-specific list of citation templates
+    """
+
     lang_module = importlib.import_module('.' + lang, package='wikiciteparser')
     if template_name in lang_module.citation_template_names:
-        return template_name
+        # Lua method map fails to match templates in unicode, so we translate them ahead
+        unicode_template_map = {
+            # Polish
+            "cytuj książkę": "cite book",
+            "cytuj stronę": "cite web",
+            # Catalan
+            "ref-publicació": "cite news",
+            "ref-web": "cite web",
+            # Portugese
+            "periódico_pt": "cite journal",
+            # Spanish
+            "publicación_es": "cite journal",
+            # Turkish
+            "kitap kaynağı_tr": "cite book",
+            "haber kaynağı_tr": "cite news",
+            "akademik dergi kaynağı_tr": "cite journal",
+            "web kaynağı": "cite web"
+        }
+        if template_name in unicode_template_map:
+            template_name = unicode_template_map[template_name]
+        split_template_name = template_name.split(' ')
+        return split_template_name[-1] if len(split_template_name) > 1 else split_template_name[0]
 
 
 def parse_citation_template(template, lang='en'):
@@ -171,18 +201,21 @@ def parse_citation_template(template, lang='en'):
         return {}
 
     template_name = template.name.strip().lower()
-    split_template_name = template_name.split(' ')
-    citation_type = split_template_name[-1] if len(split_template_name) > 1 else split_template_name[0]
 
     params = None
-    if lang != 'en' and is_citation_template_name(template_name, lang):
-        params = translate_citation(params_to_dict(template.params), citation_type, lang)
-    elif is_citation_template_name(template_name, 'en'):
-        params = params_to_dict(template.params)
+    if lang != 'en':
+        citation_type = is_citation_template_name(template_name, lang)
+        if citation_type:
+            params = translate_citation(params_to_dict(template.params), citation_type, lang)
+    if lang == 'en' or not params:
+        citation_type = is_citation_template_name(template_name, 'en')
+        if citation_type:
+            params = params_to_dict(template.params)
 
     if params:
+        # print(citation_type)
         return parse_citation_dict(params, citation_type)
     else:
-        # print("Not a citation template:", lang, template_name)
+        print("Not a citation template:", lang, template_name)
         return {}
 

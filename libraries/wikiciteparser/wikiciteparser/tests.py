@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import unittest
+import mwparserfromhell
 from wikiciteparser.parser import *
 
 # from translator import translate_and_parse_citation_template
@@ -140,10 +141,8 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(p['Title'],
                          '\u0414\u043e\u0440\u043e\u0433\u0438 \u0446\u0430\u0440\u0435\u0439 (Roads of Emperors)')
 
-    # @unittest.skip("Not relevant for multi-language parsing")
     def test_mwtext(self):
         # taken from https://en.wikipedia.org/wiki/Joachim_Lambek
-        import mwparserfromhell
         mwtext = """
         ===Articles===
         * {{Citation | last1=Lambek | first1=Joachim | author1-link=Joachim Lambek | last2=Moser | first2=L. | title=Inverse and Complementary Sequences of Natural Numbers| doi=10.2307/2308078 | mr=0062777  | journal=[[American Mathematical Monthly|The American Mathematical Monthly]] | issn=0002-9890 | volume=61 | issue=7 | pages=454–458 | year=1954 | jstor=2308078 | publisher=The American Mathematical Monthly, Vol. 61, No. 7}}
@@ -160,20 +159,16 @@ class ParsingTests(unittest.TestCase):
             # All templates in this example are citation templates
             self.assertIsInstance(parsed, dict)
 
-
-    #                 {{Cita pubblicazione|cognome=Kennedy |nome=Edward S. |data=1962 |titolo=Review: ''
-    #                 The Observatory in Islam and Its Place in the General History of the Observatory'' by Aydin Sayili |rivista=
-    #                 [[Isis (periodico)|Isis]] |volume=53 |numero=2 |pp=237-239 |doi=10.1086/349558 }}
-    #                 {{cita libro\n | autore = F. H. Shu\n | titolo = The Physical Universe\n | pubblicazione = University Science Books\n
-    #                 | data = 1982\n | città = Mill Valley, California\n | isbn = 0-935702-05-9}}
-    #                 {{cita web\n |titolo = Penn State Erie-School of Science-Astronomy and Astrophysics\n |url = http://www.erie.psu.edu/academic/science/degrees/astronomy/astrophysics.htm\n |accesso      = 20 giugno 2007\n |urlmorto     = sì\n |urlarchivio  = https://web.archive.org/web/20071101100832/http://www.erie.psu.edu/academic/science/degrees/astronomy/astrophysics.htm\n |dataarchivio = 1º novembre 2007\n}}
-    #                 {{cite web|first1=Peter|last1=Caranicas|access-date=November 7, 2018|title=ILM Launches TV Unit to Serve Episodic and Streaming Content|url=https://variety.com/2018/artisans/news/george-lucas-star-wars-ilm-launches-tv-unit-1203022007/|website=Variety|date=November 7, 2018}}
-
-
     def test_translate_it(self):
-        import mwparserfromhell
         mwtext = """
                 {{cita libro | autore = Barth, F. | titolo = Ethnic groups and boundaries: The social organization of culture differences | url = https://archive.org/details/ethnicgroupsboun0000unse | lingua = en | editore = Little Brown & Co. | città = Boston | anno = 1969}}
+                {{Cita pubblicazione|cognome=Kennedy |nome=Edward S. |data=1962 |titolo=Review: ''
+                The Observatory in Islam and Its Place in the General History of the Observatory'' by Aydin Sayili |rivista=
+                [[Isis (periodico)|Isis]] |volume=53 |numero=2 |pp=237-239 |doi=10.1086/349558 }}
+                {{cita libro\n | autore = F. H. Shu\n | titolo = The Physical Universe\n | pubblicazione = University Science Books\n
+                | data = 1982\n | città = Mill Valley, California\n | isbn = 0-935702-05-9}}
+                {{cita web\n |titolo = Penn State Erie-School of Science-Astronomy and Astrophysics\n |url = http://www.erie.psu.edu/academic/science/degrees/astronomy/astrophysics.htm\n |accesso      = 20 giugno 2007\n |urlmorto     = sì\n |urlarchivio  = https://web.archive.org/web/20071101100832/http://www.erie.psu.edu/academic/science/degrees/astronomy/astrophysics.htm\n |dataarchivio = 1º novembre 2007\n}}
+                {{cite web|first1=Peter|last1=Caranicas|access-date=November 7, 2018|title=ILM Launches TV Unit to Serve Episodic and Streaming Content|url=https://variety.com/2018/artisans/news/george-lucas-star-wars-ilm-launches-tv-unit-1203022007/|website=Variety|date=November 7, 2018}}
                 """
         wikicode = mwparserfromhell.parse(mwtext)
         for tpl in wikicode.filter_templates():
@@ -183,7 +178,6 @@ class ParsingTests(unittest.TestCase):
             self.assertIsInstance(parsed, dict)
 
     def test_translate_nl(self):
-        import mwparserfromhell
         mwtext = """
                 {{Citeer web|url=https://eurovision.tv/about/rules|titel=The Rules of the Contest|taal=en|werk=Eurovision.tv|archiefurl=https://web.archive.org/web/20220716003114/https://eurovision.tv/about/rules|archiefdatum=16 juli 2022}}
                 {{Citeer boek | achternaam = D Hillenius ea | titel = Spectrum Dieren Encyclopedie Deel 7 | pagina's = Pagina 2312 | datum = 1971 | uitgever = Uitgeverij Het Spectrum| ISBN = 90 274 2097 1}}
@@ -191,6 +185,20 @@ class ParsingTests(unittest.TestCase):
         wikicode = mwparserfromhell.parse(mwtext)
         for tpl in wikicode.filter_templates():
             parsed = parse_citation_template(tpl, 'nl')
+            print(parsed)
+            # All templates in this example are citation templates
+            self.assertIsInstance(parsed, dict)
+
+    def test_translate_pl(self):
+        mwtext = """
+            {{cytuj stronę | url = http://www.dreamcharleston.com/charleston-history.html | tytuł= An Overview History of Charleston S.C.| opublikowany = Dream, Charleston, SC | język = en | data dostępu = 2018-01-18}}
+            {{cytuj | autor = Mateusz Tałanda | tytuł = Cretaceous roots of the amphisbaenian lizards | czasopismo = Zoologica Scripta | data = 2016-01 | data dostępu = 2022-07-06 | wolumin = 45 | numer = 1 | s = 1–8 | doi = 10.1111/zsc.12138 | język = en | dostęp = z}}
+            {{Cytuj pismo |tytuł=Low-Level Nuclear Activity in Nearby Spiral Galaxies |autor=Himel Ghosh, Smita Mathur, Fabrizio Fiore, Laura Ferrarese |arxiv=0801.4382v2 |czasopismo=arXiv + The Astrophysical Journal  |data=2008-06-24 |język=en |data dostępu=2012-12-13 |doi=10.1086/591508 |wolumin=687 |wydanie=1 |strony=216-229}}
+            {{cytuj książkę\n | autor= Kasjusz Dion Kokcejanus\n | autor link= Kasjusz Dion\n | tytuł= Historia\n | url=  http://penelope.uchicago.edu/Thayer/E/Roman/Texts/Cassius_Dio/home.html\n | rozdział= Księga LIII 1; LIV 6\n}}
+                """
+        wikicode = mwparserfromhell.parse(mwtext)
+        for tpl in wikicode.filter_templates():
+            parsed = parse_citation_template(tpl, 'pl')
             print(parsed)
             # All templates in this example are citation templates
             self.assertIsInstance(parsed, dict)

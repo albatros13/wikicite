@@ -1498,9 +1498,9 @@ entry point for {{citation/Swedish}}
 
 ]]
 
-    --local function citation_sv (frame)
-    --	return _cite_sv (frame, 'citation');
-    --end
+    local function citation_sv (frame)
+    	return _cite_sv (frame, 'citation');
+    end
 
 
     --[[--------------------------< C I T E _ B O O K _ S V >------------------------------------------------------
@@ -1713,13 +1713,13 @@ implements {{Web kaynağı}} (:tr:Şablon:Web_kaynağı)
     end
 
 
-    --  Main: choose a translation method
-
+    -- Main: choose a translation method
+    -- Template names in unicode must be translated to English alternatives before calling translator
     local methods = {
 
 -- Catalan
-        ["ref-publicació_ca"] = cite_news_ca,									-- ca:Plantilla:Ref-publicació
-        ["ref-web_ca"] = cite_web_ca,											-- ca:Plantilla:Ref-web
+        news_ca = cite_news_ca,         		    							-- ca:Plantilla:Ref-publicació
+        web_ca = cite_web_ca,			        								-- ca:Plantilla:Ref-web
 
 -- Danish
         bog_da = cite_book_da,												    -- da:Skabelon:Kilde bog
@@ -1761,19 +1761,23 @@ implements {{Web kaynağı}} (:tr:Şablon:Web_kaynağı)
 
 -- Polish
         cytuj_pl = citation_pl,													-- pl:Szablon:Cytuj
-        ["książkę_pl"] = cite_book_pl,											-- pl:Szablon:Cytuj książkę
-        ["stronę_pl"] = cite_web_pl,										    -- pl:Szablon:Cytuj stronę
         pismo_pl = cite_journal_pl,											    -- pl:Szablon:Cytuj pismo
+--          ["książkę_pl"] = cite_book_pl,
+--          ["stronę_pl"] = cite_web_pl,
+        book_pl = cite_book_pl,											        -- pl:Szablon:Cytuj książkę
+        web_pl = cite_web_pl,										            -- pl:Szablon:Cytuj stronę
 
 -- Portuguese
         livro_pt = cite_book_pt,												-- pt:Predefinição:citar livro
         jornal_pt = cite_news_pt,												-- pt:Predefinição:citar jornal
         web_pt = cite_web_pt,													-- pt:Predefinição:citar web
-        ["periódico_pt"] = cite_journal_pt,										-- pt:Predefinição:citar periódico
+--         [periódico_pt] = cite_journal_pt,										-- pt:Predefinição:citar periódico
+        journal_pt = cite_journal_pt,
 
 -- Spanish
         libro_es = cite_book_es,												-- es:Plantilla:Cita libro
-        ["publicación_es"] = cite_journal_es,									-- es:Plantilla:Cita publicación
+--         "publicación_es" = cite_journal_es,						    			-- es:Plantilla:Cita publicación
+        journal_es = cite_journal_es,
         news_es = cite_news_es,												    -- es:Plantilla:Cita news
         web_es = cite_web_es,													-- es:Plantilla:Cita web
 
@@ -1784,17 +1788,21 @@ implements {{Web kaynağı}} (:tr:Şablon:Web_kaynağı)
         web_sv = cite_web_sv,
 
 -- Turkish
-        ["kitap kaynağı_tr"] = cite_book_tr,									-- tr:Şablon:Kitap kaynağı
-        ["haber kaynağı_tr"] = cite_news_tr,                                    -- tr:Şablon:Haber kaynağı
-        ["akademik dergi kaynağı_tr"] = cite_journal_tr,                        -- tr:Şablon:Akademik dergi kaynağı
+--         ["kitap kaynağı_tr"] = cite_book_tr,									-- tr:Şablon:Kitap kaynağı
+--         ["haber kaynağı_tr"] = cite_news_tr,                                    -- tr:Şablon:Haber kaynağı
+--         ["akademik dergi kaynağı_tr"] = cite_journal_tr,                        -- tr:Şablon:Akademik dergi kaynağı
+--         ["web kaynağı_tr"] = cite_web_tr,                                       -- tr:Şablon:Web kaynağı
+        book_tr = cite_book_tr,
+        news_tr = cite_news_tr,
+        journal_tr = cite_journal_tr,
+        web_tr = cite_web_tr,
         akademik_tr = cite_journal_tr,
-        ["web kaynağı_tr"] = cite_web_tr,                                       -- tr:Şablon:Web kaynağı
         webref_tr = cite_web_tr,
 
 -- Russian
-        ['Книга'] = cite_book_ru
-
-}
+--         ['Книга_ru'] = cite_book_ru
+        book_ru = cite_book_ru
+    }
 
     local choice = template_name:lower() .. '_' .. lang;
 --     print("Method name: ", choice)

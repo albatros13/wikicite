@@ -620,7 +620,7 @@ for index__, f_in in enumerate(file_paths):
     suffix = extensions[index__]
     if suffix:
         # 1 ***Citation extraction***
-        ext = "it_"
+        ext = "pl_"
 
         f_citations = PROJECT_HOME + CITATIONS_DIR + ext + 'citations' + suffix + '.parquet'
         f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'
