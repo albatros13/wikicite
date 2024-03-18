@@ -114,17 +114,13 @@ that can't be done with getArgs()
 returns <count> (the number of parameters added to <args_t>) because #args_t doesn't always work
 ]]
     local function args_get (frame, args_t)
-        local count = 0;
-        for k, v in ipairs(frame) do										     -- for each parameter in the <frames_t.args> associative table
+        for k, v in pairs(frame) do										     -- for each parameter in the <frames_t.args> associative table
             if 'string' == type (k) then										 -- ignore positional parameters
-                k = string.lower (k);										     -- set <k> lower here so we only do it once; ustring because ru.wiki ###NK TODO: use ustring because of ru.wiki ???
                 if v and not (args_t[k] or ('' == v) or (v:match ('^%s$'))) then -- skip when <args_t[k]> already present, skip when <v> is empty-string, skip when <v> is whitespace
                     args_t[k] = v;												 -- save k/v pair to in <args_t>
-                    count = count + 1;
                 end
             end
         end
-        return count;																-- return the number of parameters in <args_t>
     end
 
 
@@ -671,7 +667,7 @@ common renderer that translates parameters (after special case translations) and
         local xlated_msg = '<!-- auto-translated by Module:CS1 translator -->';
 
         res = {}
-        for k,v in pairs(frame) do
+        for k,v in pairs(out_t) do
             m = params_main_t[k];
             if m ~=nil then
                 res[m] = v
@@ -692,9 +688,9 @@ parameters)
 ]]
 
     local function dates_and_language (args_t, cite_args_t, in_lang)
-        -- 	date_make (args_t, cite_args_t, params_dates_t[in_lang]);					-- assemble and translate |date=
+        date_make (args_t, cite_args_t, params_dates_t[in_lang]);					-- assemble and translate |date=
         -- 	misc_date_make (args_t, cite_args_t, in_lang);
-        language_make (args_t, cite_args_t, in_lang, params_language_t);			-- translate language from German to appropriate language tag
+        --  language_make (args_t, cite_args_t, in_lang, params_language_t);			-- translate language from German to appropriate language tag
     end
 
 

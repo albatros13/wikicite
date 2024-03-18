@@ -150,7 +150,7 @@ class ParsingTests(unittest.TestCase):
         *{{Citation | last1=Lambek | first1=Joachim | author1-link=Joachim Lambek | title=Bicommutators of nice injectives | doi=10.1016/0021-8693(72)90034-8 | mr=0301052  | year=1972 | journal=Journal of Algebra | issn=0021-8693 | volume=21 | pages=60–73}}
         *{{Citation | last1=Lambek | first1=Joachim | author1-link=Joachim Lambek | title=Localization and completion | doi=10.1016/0022-4049(72)90011-4 | mr=0320047  | year=1972 | journal=Journal of Pure and Applied Algebra | issn=0022-4049 | volume=2 | pages=343–370 | issue=4}}
         *{{Citation | last1=Lambek | first1=Joachim | author1-link=Joachim Lambek | title=A mathematician looks at Latin conjugation | mr=589163  | year=1979 | journal=Theoretical Linguistics | issn=0301-4428 | volume=6 | issue=2 | pages=221–234 | doi=10.1515/thli.1979.6.1-3.221}}
-
+        {{cite journal | vauthors = Caboche M, Bachellerie JP | title = RNA methylation and control of eukaryotic RNA biosynthesis. Effects of cycloleucine, a specific inhibitor of methylation, on ribosomal RNA maturation | journal = European Journal of Biochemistry | volume = 74 | issue = 1 | pages = 19–29 | date = March 1977 | pmid = 856572 | doi = 10.1111/j.1432-1033.1977.tb11362.x | doi-access = free }}
         """
         wikicode = mwparserfromhell.parse(mwtext)
         for tpl in wikicode.filter_templates():
@@ -176,11 +176,13 @@ class ParsingTests(unittest.TestCase):
             print(parsed)
             # All templates in this example are citation templates
             self.assertIsInstance(parsed, dict)
+            self.assertNotEqual(parsed, "{}")
 
     def test_translate_nl(self):
         mwtext = """
                 {{Citeer web|url=https://eurovision.tv/about/rules|titel=The Rules of the Contest|taal=en|werk=Eurovision.tv|archiefurl=https://web.archive.org/web/20220716003114/https://eurovision.tv/about/rules|archiefdatum=16 juli 2022}}
                 {{Citeer boek | achternaam = D Hillenius ea | titel = Spectrum Dieren Encyclopedie Deel 7 | pagina's = Pagina 2312 | datum = 1971 | uitgever = Uitgeverij Het Spectrum| ISBN = 90 274 2097 1}}
+                {{citeer journal | auteur = Higgs PG | title = RNA secondary structure: physical and computational aspects | url = https://archive.org/details/sim_quarterly-reviews-of-biophysics_2000-08_33_3/page/199 | journal = Quarterly Reviews of Biophysics | volume = 33 | issue = 3 | pages = 199–253 | date = 2000 | pmid = 11191843 | doi = 10.1017/S0033583500003620 }}
                 """
         wikicode = mwparserfromhell.parse(mwtext)
         for tpl in wikicode.filter_templates():
@@ -188,6 +190,7 @@ class ParsingTests(unittest.TestCase):
             print(parsed)
             # All templates in this example are citation templates
             self.assertIsInstance(parsed, dict)
+            self.assertNotEqual(parsed, "{}")
 
     def test_translate_pl(self):
         mwtext = """
@@ -202,6 +205,24 @@ class ParsingTests(unittest.TestCase):
             print(parsed)
             # All templates in this example are citation templates
             self.assertIsInstance(parsed, dict)
+            self.assertNotEqual(parsed, "{}")
+
+    def test_translate_fr(self):
+        mwtext = """
+            {{Article|auteur1=Walter Moser|titre=« Puissance baroque » dans les nouveaux médias. À propos de Prospero’s Books de Peter Greenaway|périodique=Cinémas|volume=10|numéro=2-3|date=printemps 2000|lire en ligne=https://doi.org/10.7202/024815ar|pages=39–63}}
+            {{article|prénom1=|nom1=|url=http://www.journaldesfemmes.com/loisirs/cinema/1740005-palmares-globes-de-cristal-2017-ceremonie/|titre=Globes de Cristal 2017 : le palmarès complet|consulté le=31 janvier 17|périodique=Le Journal des femmes|jour=31|mois=janvier|année=2017}}
+            {{lien web|url=https://news.google.com/newspapers?nid=1310&dat=19580426&id=sMgUAAAAIBAJ&pg=3303,4437749|titre=Little America Will Float Away on an Iceberg|site=Eugene Register-Guard|date=April 1958|consulté le=14 décembre 2009}}
+            {{article|titre=Mythopoïèse et souffrance familiale|auteur=Evelyn Granjon|année=2000|pages=13-22|périodique=Le Divan familial|numéro=4}}
+            {{Ouvrage|auteur1=Sous la direction d'Emmanuelle Brugerolles|titre=Rembrandt et son entourage, Carnets d'études 23|passage=p. 74-77, Cat. 18|éditeur=Beaux-arts de Paris les éditions|date=2012-2014}}
+            {{Ouvrage|auteur1=Emile Wiriot|titre=Le quartier Saint-Jacques et les quartiers voisins|éditeur=Tolra|année=1930|passage=254|lire en ligne=https://gallica.bnf.fr/ark:/12148/bpt6k165711w/f254.image}}
+            """
+        wikicode = mwparserfromhell.parse(mwtext)
+        for tpl in wikicode.filter_templates():
+            parsed = parse_citation_template(tpl, 'fr')
+            print(parsed)
+            # All templates in this example are citation templates
+            self.assertIsInstance(parsed, dict)
+            self.assertNotEqual(parsed, "{}")
 
 
 if __name__ == '__main__':

@@ -491,9 +491,10 @@ local params_main_t = {
 		['série'] = 'series',
 		['site'] = 'website',
 		['sous-titre'] = nil,													-- special case: |title=; subtitle combined with |title=
-        ['sous-titre ouvrage'] = nil,   -- special case: |title=; subtitle combined with |title= (added to function title_make_fr)
+        ['sous-titre ouvrage'] = nil,                                           -- special case: |title=; subtitle combined with |title= (added to function title_make_fr)
 		['sudoc'] = nil,														-- special case |id=; [[:fr:Système universitaire de documentation]]
-		['titre'] = nil,														-- special case: |title=
+-- 		NK replaced nil to 'title' to extract cited work titles
+		['titre'] = 'title',													-- special case: |title=
 		['titre chapitre'] = nil,												-- special case |chapter=
 		['titre numéro'] = nil,													-- no cs1|2 equivalent; special case: issue title?
 		['titre original'] = nil,												-- special case: |title=; title in original language

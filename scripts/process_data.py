@@ -100,25 +100,30 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
     citations = citations.withColumn('type_of_citation',
                                      expr('substring(type_of_citation, 2, length(type_of_citation))'))
 
-    # NK unique citation types that did not get included to the templates
-    # citation_types = citations.select('type_of_citation').distinct()
-    # print("Citation types:", citation_types['type_of_citation'])
-    
     import importlib
     lang_module = importlib.import_module('.' + lang, package='wikiciteparser')
     if not lang_module:
         print("Can't process language: ", lang)
-        return        
+        return
     citation_templates = lang_module.citation_template_names
     if lang != 'en':
         en_module = importlib.import_module('.en', package='wikiciteparser')
         if en_module:
             citation_templates = citation_templates.union(en_module.citation_template_names)
-        
-    # accepted = citation_types.filter((citation_types['type_of_citation'].isin(citation_templates)))
-    # print("Accepted citation types:", accepted.collect())
-    # rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(citation_templates)))
-    # print("Rejected citation types:", rejected.collect())
+        # NK remove 'citation' because unlike English wiki, in e.g., French 'citation' refers to inline quotation.
+        # Most languages do not make use of 'citation' (Dutch, English)
+        citation_templates.remove('citation')
+
+    print("Recognized citation templates:", citation_templates)
+
+    # NK unique citation types that did not get included to the templates
+    citation_types = citations.groupby('type_of_citation').count().sort(col("count").desc())
+
+    accepted = citation_types.filter((citation_types['type_of_citation'].isin(citation_templates)))
+    print("Accepted citation templates:", accepted.show())
+
+    rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(citation_templates)))
+    print("Rejected citation templates:", rejected.show())
 
     print("Before matching with templates:", citations.count(), len(citations.columns))
     citations = citations.filter(citations['type_of_citation'].isin(citation_templates))
@@ -620,7 +625,7 @@ for index__, f_in in enumerate(file_paths):
     suffix = extensions[index__]
     if suffix:
         # 1 ***Citation extraction***
-        ext = "pl_"
+        ext = "fr_"
 
         f_citations = PROJECT_HOME + CITATIONS_DIR + ext + 'citations' + suffix + '.parquet'
         f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'

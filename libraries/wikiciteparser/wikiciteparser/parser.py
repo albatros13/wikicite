@@ -144,7 +144,7 @@ def params_to_dict(params):
     """
     dct = {}
     for param in params:
-        dct[param.name.strip()] = param.value.strip()
+        dct[param.name.strip().lower()] = param.value.strip()
     return dct
 
 
@@ -213,7 +213,7 @@ def parse_citation_template(template, lang='en'):
             params = params_to_dict(template.params)
 
     if params:
-        # print(citation_type)
+        # print(citation_type, params)
         return parse_citation_dict(params, citation_type)
     else:
         print("Not a citation template:", lang, template_name)
