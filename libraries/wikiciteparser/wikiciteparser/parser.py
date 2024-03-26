@@ -114,16 +114,21 @@ def parse_citation_dict(arguments, citation_type):
             if '2' in arguments:
                 arguments['Title'] = arguments.pop('2')
     else:
-        if citation_type == "web" and len(arguments) > 0:
-            res = {'CitationClass': citation_type, 'URL': arguments[0]}
-            if len(arguments) > 1:
-                res['Title'] = arguments[1]
-            arguments = res
+        if len(arguments) > 0:
+            if citation_type == "web":
+                arguments = {'CitationClass': citation_type,
+                             'URL': arguments[0],
+                             'title': arguments[1] if len(arguments) > 1 else ""}
+            if citation_type == "link":
+                base = 1 if len(arguments[0]) < 3 else 0
+                arguments = {'CitationClass': citation_type,
+                             'URL': arguments[base] if len(arguments) > base else "",
+                             'title': arguments[base+1] if len(arguments) > (base+1) else ""}
         else:
             print(citation_type, type(arguments), arguments)
 
-    lua_table = lua.table_from(arguments)
     try:
+        lua_table = lua.table_from(arguments)
         lua_result = lua.eval(lua_parser)(lua_table,
                                           ustring_match,
                                           ustring_len,
@@ -134,8 +139,7 @@ def parse_citation_dict(arguments, citation_type):
         print("Error in calling Lua code from parser: ", citation_type, arguments)
         return {'Title': 'Citation generic template not possible'}
 
-    wrapped_type = lua.globals().type
-    return to_py_dict(lua_result, wrapped_type)
+    return to_py_dict(lua_result, lua.globals().type)
 
 
 def params_to_dict(params):
@@ -152,8 +156,14 @@ def translate_citation(arguments, citation_type, lang):
     """
     Translates citation to English
     """
-    lua_table = lua.table_from(arguments)
-    lua_result = lua.eval(lua_translator)(lua_table, lang, citation_type, lua_data_path)
+    # print("Original arguments:", arguments)
+    try:
+        lua_table = lua.table_from(arguments)
+        lua_result = lua.eval(lua_translator)(lua_table, lang, citation_type, lua_data_path)
+    except Exception as e:
+        print("Error in calling Lua code from translator: ", citation_type, arguments)
+        return {'Title': 'Citation generic template not possible'}
+
     return to_py_dict(lua_result, lua.globals().type)
 
 
@@ -166,21 +176,27 @@ def is_citation_template_name(template_name, lang):
     if template_name in lang_module.citation_template_names:
         # Lua method map fails to match templates in unicode, so we translate them ahead
         unicode_template_map = {
-            # Polish
-            "cytuj książkę": "cite book",
-            "cytuj stronę": "cite web",
             # Catalan
             "ref-publicació": "cite news",
             "ref-web": "cite web",
+            # Polish
+            "cytuj książkę": "cite book",
+            "cytuj stronę": "cite web",
             # Portugese
-            "periódico_pt": "cite journal",
+            "citar periódico": "cite journal",
             # Spanish
-            "publicación_es": "cite journal",
+            "cita publicación": "cite journal",
             # Turkish
-            "kitap kaynağı_tr": "cite book",
-            "haber kaynağı_tr": "cite news",
-            "akademik dergi kaynağı_tr": "cite journal",
-            "web kaynağı": "cite web"
+            "kitap kaynağı": "cite book",
+            "haber kaynağı": "cite news",
+            "akademik dergi kaynağı": "cite journal",
+            "web kaynağı": "cite web",
+            # Russian
+            "книга": "cite book",
+            "статья": "cite journal",
+            "публикация": "cite journal",
+            "фильм": "cite av media",
+            "телефильм": "cite av media"
         }
         if template_name in unicode_template_map:
             template_name = unicode_template_map[template_name]
@@ -213,7 +229,7 @@ def parse_citation_template(template, lang='en'):
             params = params_to_dict(template.params)
 
     if params:
-        # print(citation_type, params)
+        # print("Translated arguments:", citation_type, params)
         return parse_citation_dict(params, citation_type)
     else:
         print("Not a citation template:", lang, template_name)

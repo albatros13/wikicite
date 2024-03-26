@@ -25,5 +25,9 @@ citation_template_names = set([
     'cite speech',
     'cite tech report',
     'cite thesis',
-    'cite web'
+    'cite web',
+    'wayback',
+    'webcite',
+    'memento',
+    'webarchive'
 ])

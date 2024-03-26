@@ -112,7 +112,8 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
             citation_templates = citation_templates.union(en_module.citation_template_names)
         # NK remove 'citation' because unlike English wiki, in e.g., French 'citation' refers to inline quotation.
         # Most languages do not make use of 'citation' (Dutch, English)
-        citation_templates.remove('citation')
+        if lang == 'it':
+            citation_templates.remove('citation')
 
     print("Recognized citation templates:", citation_templates)
 
@@ -120,14 +121,16 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
     citation_types = citations.groupby('type_of_citation').count().sort(col("count").desc())
 
     accepted = citation_types.filter((citation_types['type_of_citation'].isin(citation_templates)))
-    print("Accepted citation templates:", accepted.show())
+    print("Accepted citation templates:")
+    accepted.show()
 
     rejected = citation_types.filter(~(citation_types['type_of_citation'].isin(citation_templates)))
-    print("Rejected citation templates:", rejected.show())
+    print("Rejected citation templates:")
+    rejected.show()
 
-    print("Before matching with templates:", citations.count(), len(citations.columns))
+    print("Before matching with templates:", citations.count())
     citations = citations.filter(citations['type_of_citation'].isin(citation_templates))
-    print("After matching with templates:", citations.count(), len(citations.columns))
+    print("After matching with templates:", citations.count())
 
     def check_if_balanced(my_string):
         """
@@ -144,33 +147,32 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
     def list_to_str(items):
         return ", ".join([str(a) for a in items])
 
-    def get_generic_template(citation, template_name):
+    def get_generic_template(citation):
         """
             Get generic template of a citation using the wikiciteparser library.
             :param: citation - according to a particular format as described in CITATION_TEMPLATES
         """
-        not_parsable = {'Title': 'Citation generic template not possible'}
+        not_parsable = {'Title': 'Citation generic template not possible', 'citations': citation}
         if not check_if_balanced(citation):
             citation = citation + '}}'
+
         # Convert the str into mwparser object
-        wikicode = mwparserfromhell.parse(citation)
         try:
+            wikicode = mwparserfromhell.parse(citation)
             template = wikicode.filter_templates()[0]
+            parsed_result = parse_citation_template(template, lang)
+            # NK This is a fix for potentially different field types: array vs string
+            if "Authors" in parsed_result:
+                parsed_result["Authors"] = list_to_str(parsed_result["Authors"])
+            if "ID_list" in parsed_result:
+                parsed_result["ID_list"] = str(parsed_result["ID_list"])
+            if "PublisherName" in parsed_result:
+                parsed_result["PublisherName"] = parsed_result["PublisherName"].replace("[[", '').replace("]]", '')
+
+            # In case the mwparser is not able to parse the citation template
+            return parsed_result if parsed_result is not None else not_parsable
         except IndexError:
             return not_parsable
-
-        parsed_result = parse_citation_template(template, lang)
-
-        # NK This is a fix for potentially different field types: array vs string
-        if "Authors" in parsed_result:
-            parsed_result["Authors"] = list_to_str(parsed_result["Authors"])
-        if "ID_list" in parsed_result:
-            parsed_result["ID_list"] = str(parsed_result["ID_list"])
-        if "PublisherName" in parsed_result:
-            parsed_result["PublisherName"] = parsed_result["PublisherName"].replace("[[", '').replace("]]", '')
-
-        # In case the mwparser is not able to parse the citation template
-        return parsed_result if parsed_result is not None else not_parsable
 
     def get_value(citation, key):
         if key in citation:
@@ -183,7 +185,7 @@ def get_generic_tmpl(file_in, file_out, lang='en'):
             Get each article's generic templated citations with their id, title and type.
             :param line: a row from the dataframe generated from get_data.py.
         """
-        citation_dict = get_generic_template(line.citations, line.type_of_citation)
+        citation_dict = get_generic_template(line.citations)
         return Row(
             citations=line.citations,
             id=line.id,
@@ -625,7 +627,7 @@ for index__, f_in in enumerate(file_paths):
     suffix = extensions[index__]
     if suffix:
         # 1 ***Citation extraction***
-        ext = "fr_"
+        ext = "ru_"
 
         f_citations = PROJECT_HOME + CITATIONS_DIR + ext + 'citations' + suffix + '.parquet'
         f_separated = PROJECT_HOME + SEPARATED_DIR + ext + 'citations_separated' + suffix + '.parquet'

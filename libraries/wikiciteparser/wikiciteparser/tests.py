@@ -141,7 +141,7 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(p['Title'],
                          '\u0414\u043e\u0440\u043e\u0433\u0438 \u0446\u0430\u0440\u0435\u0439 (Roads of Emperors)')
 
-    def test_mwtext(self):
+    def test_mwtext_en(self):
         # taken from https://en.wikipedia.org/wiki/Joachim_Lambek
         mwtext = """
         ===Articles===
@@ -151,6 +151,7 @@ class ParsingTests(unittest.TestCase):
         *{{Citation | last1=Lambek | first1=Joachim | author1-link=Joachim Lambek | title=Localization and completion | doi=10.1016/0022-4049(72)90011-4 | mr=0320047  | year=1972 | journal=Journal of Pure and Applied Algebra | issn=0022-4049 | volume=2 | pages=343–370 | issue=4}}
         *{{Citation | last1=Lambek | first1=Joachim | author1-link=Joachim Lambek | title=A mathematician looks at Latin conjugation | mr=589163  | year=1979 | journal=Theoretical Linguistics | issn=0301-4428 | volume=6 | issue=2 | pages=221–234 | doi=10.1515/thli.1979.6.1-3.221}}
         {{cite journal | vauthors = Caboche M, Bachellerie JP | title = RNA methylation and control of eukaryotic RNA biosynthesis. Effects of cycloleucine, a specific inhibitor of methylation, on ribosomal RNA maturation | journal = European Journal of Biochemistry | volume = 74 | issue = 1 | pages = 19–29 | date = March 1977 | pmid = 856572 | doi = 10.1111/j.1432-1033.1977.tb11362.x | doi-access = free }}
+        {{Wayback|url=http://www.mondonedoferrol.org/estudios-mindonienses/MINDONIENSES%2024%20&#91;protegido&#93;.pdf |date=20160611035306 }}
         """
         wikicode = mwparserfromhell.parse(mwtext)
         for tpl in wikicode.filter_templates():
@@ -158,6 +159,8 @@ class ParsingTests(unittest.TestCase):
             print(parsed)
             # All templates in this example are citation templates
             self.assertIsInstance(parsed, dict)
+
+    # Multi-language citation extraction
 
     def test_translate_it(self):
         mwtext = """
@@ -183,6 +186,15 @@ class ParsingTests(unittest.TestCase):
                 {{Citeer web|url=https://eurovision.tv/about/rules|titel=The Rules of the Contest|taal=en|werk=Eurovision.tv|archiefurl=https://web.archive.org/web/20220716003114/https://eurovision.tv/about/rules|archiefdatum=16 juli 2022}}
                 {{Citeer boek | achternaam = D Hillenius ea | titel = Spectrum Dieren Encyclopedie Deel 7 | pagina's = Pagina 2312 | datum = 1971 | uitgever = Uitgeverij Het Spectrum| ISBN = 90 274 2097 1}}
                 {{citeer journal | auteur = Higgs PG | title = RNA secondary structure: physical and computational aspects | url = https://archive.org/details/sim_quarterly-reviews-of-biophysics_2000-08_33_3/page/199 | journal = Quarterly Reviews of Biophysics | volume = 33 | issue = 3 | pages = 199–253 | date = 2000 | pmid = 11191843 | doi = 10.1017/S0033583500003620 }}
+                {{Citeer web|url=https://charts.org.nz/showitem.asp?interpret=Eric+Clapton&titel=461+Ocean+Boulevard&cat=a|
+                    =https://web.archive.org/web/20121102111730/https://charts.org.nz/showitem.asp?interpret=Eric+Clapton&titel=461+Ocean+Boulevard&cat=a
+                    |title=Eric Clapton - 461 Ocean Boulevard,
+                    |dodelink=ja,
+                    |work=charts.org.nz,
+                    |bezochtdatum=18 augustus 2012,
+                    |archive-date=2 november 2012,
+                    |archive-url=https://web.archive.org/web/20121102111730/https://charts.org.nz/showitem.asp?interpret=Eric+Clapton&titel=461+Ocean+Boulevard&cat=a
+                }}
                 """
         wikicode = mwparserfromhell.parse(mwtext)
         for tpl in wikicode.filter_templates():
@@ -219,6 +231,81 @@ class ParsingTests(unittest.TestCase):
         wikicode = mwparserfromhell.parse(mwtext)
         for tpl in wikicode.filter_templates():
             parsed = parse_citation_template(tpl, 'fr')
+            print(parsed)
+            # All templates in this example are citation templates
+            self.assertIsInstance(parsed, dict)
+            self.assertNotEqual(parsed, "{}")
+
+    def test_translate_de(self):
+        mwtext = """
+        {{Internetquelle|url=http://profootballtalk.nbcsports.com/2016/01/20/morgan-cox-jon-weeks-added-to-pro-bowl-as-long-snappers/|titel=Morgan Cox, Jon Weeks added to Pro Bowl as long snappers|datum=2016-01-20|autor=Josh Alper|sprache=en|zugriff=2016-01-28}}
+        {{Literatur|Autor=Smith, C. N., Wixted, J. T. & Squire, L. R.|Titel=The hippocampus supports both recollection and familiarity when memories are strong. Journal of Neuroscience, 31|Jahr=2011|Seiten=15693–15702.}}
+        {{cite web|url=http://www.cincinnati.com/story/sports/soccer/fc-cincinnati/2016/05/14/mclaughlins-goal-gives-fc-cincy-1-0-lead-half/84382158/|title=Another record crowd turns out to watch FC Cincy win|last=Brennan|first=Patrick|date=2016-05-14|work=[[Cincinnati Enquirer]]|accessdate=2016-10-07}}
+        {{Webarchiv|url=http://www.kath-dekanat-tbb.de/html/seelsorgeeinheiten.html |wayback=20190712173456 |text=''Seelsorgeeinheiten des Dekanats Tauberbischofsheim'' |archiv-bot=2023-01-13 18:13:18 InternetArchiveBot }}
+        {{Webarchiv|url=http://www.vertebrates.si.edu/msw/mswcfapp/msw/taxon_browser.cfm?msw_id=5398 |wayback=20151223190334 |text=Berylmys manipulus |archiv-bot=2019-04-29 10:19:15 InternetArchiveBot }}
+            """
+        wikicode = mwparserfromhell.parse(mwtext)
+        for tpl in wikicode.filter_templates():
+            parsed = parse_citation_template(tpl, 'de')
+            print(parsed)
+            # All templates in this example are citation templates
+            self.assertIsInstance(parsed, dict)
+            self.assertNotEqual(parsed, "{}")
+
+    def test_translate_pt(self):
+        mwtext = """
+            {{Citar web|ultimo=Ohnezeit|primeiro=Maik|url=https://www.bismarck-stiftung.de/2020/10/05/kalenderblatt-der-sieges-einzug-in-paris-am-1-maerz-1871/|titulo=Kalenderblatt: „Der Sieges-Einzug in Paris am 1. März 1871“|data=2020-10-05|acessodata=2022-12-03|website=Otto-von-Bismarck-Stiftung|lingua=de-DE-formal}}
+            {{Citar livro|url=https://books.google.com/books?id=04mJJlND1ccC|título=The Suppression of the African Slave-trade to the United States of America, 1638-1870|ultimo=Bois|primeiro=William Edward Burghardt Du|data=1904|editora=Longmans, Green and Company|lingua=en}}
+            {{Citar livro|url=https://books.google.com/books?id=04mJJlND1ccC|título=The Suppression of the African Slave-trade to the United States of America, 1638-1870|ultimo=Bois|primeiro=William Edward Burghardt Du|data=1904|editora=Longmans, Green and Company|lingua=en}}
+            {{Link|en|2=http://www.nytimes.com/learning/general/onthisday/20070309.html |3=''The New York Times'': On This Day}}
+            {{Link||2=http://www.imdb.com/title/tt0384994|3=''Hidden in Plain Sight'' (2003)|4= (entrevistado)}}
+            {{Citar periódico |url=https://www.bbc.com/news/world-middle-east-23700663 |título=Egypt declares national emergency |data=2013-08-14 |acessodata=2023-07-26 |periódico=BBC News |lingua=en-GB}}
+            {{citar jornal|url=https://www.afro.who.int/news/africa-eradicates-wild-poliovirus|título=Africa eradicates wild poliovirus|data=25 de agosto de 2020|acessodata=25 de agosto de 2020|língua=en|agência=OMS}}
+            {{link|en|http://guindo.pntic.mec.es/~jmag0042/alphaspa.html| Tipo de letra que inclui os sinais da Linear B}}
+            {{Link||2=http://antena.indice.googlepages.com/home|3=antena.indice.googlepages.com/home}}
+        """
+        wikicode = mwparserfromhell.parse(mwtext)
+        for tpl in wikicode.filter_templates():
+            parsed = parse_citation_template(tpl, 'pt')
+            print(parsed)
+            # All templates in this example are citation templates
+            self.assertIsInstance(parsed, dict)
+            self.assertNotEqual(parsed, "{}")
+
+    def test_translate_es(self):
+        mwtext = """
+            {{cita publicación |apellidos=Thorsett, S.E.; Benjamin, R.A.; Brisken, Walter F.; Golden, A.; Goss, W.M.|año= 2003|título= Pulsar PSR B0656+14, the Monogem Ring, and the Origin of the Knee in the Primary Cosmic-Ray Spectrum |publicación=[[The Astrophysical Journal]] |volumen= 592|número= 2|páginas= L71-L73|ubicación= |editorial= |issn= |url= https://ui.adsabs.harvard.edu/abs/2003ApJ...592L..71T/abstract|fechaacceso=26 de septiembre de 2021}}
+            {{cite journal |title = Planetary companions in K giants β Cancri, μ Leonis, and β Ursae Minoris|author=Lee, B.-C.|author2=Han, I.|author3=Park, M.-G.|author4=Mkrtichian, D. E.|author5=Hatzes, A. P.|author6=Kim, K.-M. |journal = [[Astronomy and Astrophysics]]\n|date = 2014 |volume = 566 |pages=A67 |doi = 10.1051/0004-6361/201322608 |bibcode = 2014A&A...566A..67L |arxiv = 1405.2127|s2cid=118631934}}
+            {{cita web |url=http://www.fayerwayer.com/2011/09/armen-sus-maletas-descubren-el-exoplaneta-habitable-mas-similar-a-la-tierra/ |título=Armen sus maletas: Descubren el exoplaneta habitable más similar a la Tierra |editorial=Fayerwayer |fechaacceso= 4 de septiembre de 2011}}
+            {{Cita web |título=Quilmes, la historia de una empresa que se vendió en 1800 millones de dólares|editorial=Infobae |url=http://www.infobae.com/2006/04/15/249296-quilmes-la-historia-una-empresa-que-se-vendio-us1800-millones |fechaacceso=25 de enero de 2016}}
+            {{cita libro |apellidos= [[Gonzalo Martínez Diez|Martínez Díez]] |nombre= Gonzalo |coautores= |editor= Editorial Aldecoa |otros= |título= Colección Documental Del Monasterio de San Pedro de Cardeña |edición= |año= 1998 |editorial= Caja de Ahorros y Monte de Piedad del Círculo Católico de Obreros de Burgos |número= |idioma= es |id= |isbn= 978-84-7009-567-2 |página= |cita= }}
+            {{cita publicación |apellidos=Knies, Jonathan R.; Sasaki, Manami; Plucinsky, Paul P. |año= 2018|título=Suzaku observations of the Monogem Ring and the origin of the Gemini H α ring  |publicación=[[Monthly Notices of the Royal Astronomical Society]] |volumen=477 |número= 4|páginas= 4414-4422|ubicación= |editorial= |issn= |url= https://ui.adsabs.harvard.edu/abs/2018MNRAS.477.4414K/abstract |fechaacceso=26 de septiembre de 2021}}
+            {{Wayback|url=http://www.mondonedoferrol.org/estudios-mindonienses/MINDONIENSES%2024%20&#91;protegido&#93;.pdf |date=20160611035306 }}
+            {{Cita noticia|apellidos=|nombre=Municipio B|título=MERCADO DEL INMIGRANTE|url=https://municipiob.montevideo.gub.uy/mercado-del-inmigrante|fecha=20 de septiembre de 2019|fechaacceso=|periódico=|ubicación=|página=|número=|urlarchivo=|fechaarchivo=}}
+        """
+        wikicode = mwparserfromhell.parse(mwtext)
+        for tpl in wikicode.filter_templates():
+            parsed = parse_citation_template(tpl, 'es')
+            print(parsed)
+            # All templates in this example are citation templates
+            self.assertIsInstance(parsed, dict)
+            self.assertNotEqual(parsed, "{}")
+
+    def test_translate_ru(self):
+        mwtext = """
+            {{книга|год=1980 |заглавие=When The Lights Go Down |издательство={{Нп3|Henry Holt and Company|Henry Holt & Co.|en|Henry Holt and Company}} |isbn=0-03-042511-5 |ref=Kael |язык=en |автор=Kael, Pauline}}
+            {{статья|автор=[[Гейзер, Матвей Моисеевич|Гейзер М.]]|заглавие=Расставание с прошлым неизбежно|ссылка=http://www.lechaim.ru/ARHIV/112/geyzer.htm|издание=[[Лехаим (журнал)|Лехаим]]|тип=журнал|место=М.|издательство=Лехаим|год=2001|месяц=8|номер=8 (112)|issn=0869-5792|archivedate=2016-10-18|archiveurl=https://web.archive.org/web/20161018173007/http://www.lechaim.ru/ARHIV/112/geyzer.htm}}
+            {{citation | last = Andriollo | first = Lisa | chapter = Les Kourkouas (IXe-XIe siècle) | language = fr | title = Studies in Byzantine Sigillography | volume = 11 | editor1-last = Cheynet | editor1-first=Jean-Claude | editor2-last = Sode | editor2-first = Claudia | location = Berlin | publisher = De Gruyter | year = 2012 | pages = 57–88 | isbn = 978-3-11-026668-9 | chapter-url = https://www.academia.edu/2074096}}
+            {{книга|автор=[[Васильев, Александр Александрович (историк)|Васильев А. А.]]|заглавие=История Византийской империи |ссылка часть= http://www.hrono.ru/libris/lib_we/vaa100.php |часть=Том 1 |место=М.|издательство=Алетейя|год=2000|страниц=|isbn=978-5-403-01726-8}}
+            {{Фильм\n| РусНаз           = Восемь с половиной\n| Изображение      = 8Mezzo.jpg\n| Размер           = \n| Жанр             = [[трагикомедия]]\n| Режиссёр         = [[Феллини, Федерико|Федерико Феллини]]\n| В главных ролях  = [[Мастроянни, Марчелло|Марчелло Мастроянни]]\n| Продюсер         = [[Анжело Риццоли]]\n| Сценарист        = \n| Композитор       = \n| Художник-постановщик = Пьеро Герарди\n| Компания         = {{нп4|Cineriz}}<br>Francinex\n| Оператор         = [[Ди Венанцо, Джанни|Джанни Ди Венанцо]]\n| Время            = 138 мин\n| Бюджет           = \n| Сборы            = \n| Страна           = {{ITA-cinema}}\n| Язык             = \n| Год              = 1963\n}}
+            {{книга\n |автор         = Бергман И.\n |заглавие      = Картины\n |ссылка        = \n |ответственный = Перевод со шведского А. Афиногеновой\n |место         = М.- Таллин\n |издательство  = Музей кино, Aleksandra\n |год           = 1997\n |страницы      = \n |страниц       = 440\n |isbn          = 9985-827-27-9\n}}
+            {{Телефильм\n| РусНаз      = Огненный сезон\n| ОригНаз     = The Burning Season\n| Изображение = Medium burning.jpg\n| Жанр        = [[Драма (жанр)|драма]]<br>[[фильм-биография]]\n| Режиссёр    = [[Франкенхаймер, Джон|Джон Франкенхаймер]]\n| Актёры      = [[Хулия, Рауль|Рауль Хулия]]<br>[[Брага, Сония|Сония Брага]]<br>[[Олмос, Эдвард Джеймс|Эдвард Джеймс Олмос]]\n|Продюсер = Джон Франкенхаймер<br>Томас Хэммел<br>Грасия Раде\n|Сценарист = {{Iw|Ревкин, Эндрю|Эндрю Ревкин||Andrew Revkin}}<br>[[Мастросимоне, Уильям|Уильям Мастросимоне]]\n|Композитор = Гари Чанг\n|Оператор = [[Леонетти, Джон|Джон Р. Леонетти]]\n|Компания = [[HBO]]\n|Бюджет =\n}}
+            {{Wayback|url=https://www.treccani.it/enciclopedia/giovanni-battista-pergolesi_(Dizionario-Biografico) |date=20201211193654 }}
+            {{Wayback|url=http://s-marshak.ru/articles/andronikov.htm |date=20161031200936 }}
+        """
+        wikicode = mwparserfromhell.parse(mwtext)
+        for tpl in wikicode.filter_templates():
+            parsed = parse_citation_template(tpl, 'ru')
             print(parsed)
             # All templates in this example are citation templates
             self.assertIsInstance(parsed, dict)

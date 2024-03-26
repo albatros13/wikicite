@@ -1397,11 +1397,11 @@ Common function to implement:
 
         url_status_make (args_t, cite_args_t, {'datali', 'dead-url', 'deadurl', 'li', 'ligação inactiva', 'ligação inativa', 'urlmorta'}, {['no'] = true, ['não'] = true});
 
-        local language = language_make_pt (args_t, cite_args_t);					-- get string of language tags and/or unknown language names (or nil if no language parameters)
-
-        if language then
-            table.insert (cite_args_t, 'language=' .. language);
-        end
+--         local language = language_make_pt (args_t, cite_args_t);					-- get string of language tags and/or unknown language names (or nil if no language parameters)
+--
+--         if language then
+--             table.insert (cite_args_t, 'language=' .. language);
+--         end
 
         return render (frame, args_t, cite_args_t, params_main_t.pt, template);		-- now go render the citation
     end
@@ -1555,6 +1555,39 @@ implements {{Книга}} (:ru:Шаблон:Книга)
         return render (frame, args_t, cite_args_t, params_main_t.ru, 'cite book');	-- now go render the citation
     end
 
+
+    local function cite_journal_ru (frame)
+        local args_t = {};															-- a table of k/v pairs that holds the template's parameters
+        args_get (frame, args_t);													-- get the parameters and their values
+
+        local cite_args_t = {};														-- a sequence table that holds parameter=value strings (without pipes); for sorting
+
+        dates_and_language (args_t, cite_args_t, 'ru');								-- translate dates and language parameters
+
+        return render (frame, args_t, cite_args_t, params_main_t.ru, 'cite journal');	-- now go render the citation
+    end
+
+    local function cite_media_ru (frame)
+        local args_t = {};															-- a table of k/v pairs that holds the template's parameters
+        args_get (frame, args_t);													-- get the parameters and their values
+
+        local cite_args_t = {};														-- a sequence table that holds parameter=value strings (without pipes); for sorting
+
+        dates_and_language (args_t, cite_args_t, 'ru');								-- translate dates and language parameters
+
+        return render (frame, args_t, cite_args_t, params_main_t.ru, 'cite AV media');	-- now go render the citation
+    end
+
+    local function cite_web_ru (frame)
+        local args_t = {};															-- a table of k/v pairs that holds the template's parameters
+        args_get (frame, args_t);													-- get the parameters and their values
+
+        local cite_args_t = {};														-- a sequence table that holds parameter=value strings (without pipes); for sorting
+
+        dates_and_language (args_t, cite_args_t, 'ru');								-- translate dates and language parameters
+
+        return render (frame, args_t, cite_args_t, params_main_t.ru, 'cite web');	-- now go render the citation
+    end
 
     --[[=========================<< C I T E   W E B   F U N C T I O N S >>=========================================
     ]]
@@ -1732,6 +1765,7 @@ implements {{Web kaynağı}} (:tr:Şablon:Web_kaynağı)
 -- German
         literatur_de = cite_book_de,	       								    -- de:Vorlage:Literatur
         internetquelle_de = cite_web_de,										-- de:Vorlage:Internetquelle
+        webarchiv_de = cite_web_de,
 
 -- Finnish
         lehtiviite_fi = cite_journal_fi,										-- fi:Malline:Lehtiviite
@@ -1767,6 +1801,7 @@ implements {{Web kaynağı}} (:tr:Şablon:Web_kaynağı)
         livro_pt = cite_book_pt,												-- pt:Predefinição:citar livro
         jornal_pt = cite_news_pt,												-- pt:Predefinição:citar jornal
         web_pt = cite_web_pt,													-- pt:Predefinição:citar web
+        link_pt = cite_web_pt,
 --         [periódico_pt] = cite_journal_pt,										-- pt:Predefinição:citar periódico
         journal_pt = cite_journal_pt,
 
@@ -1776,6 +1811,7 @@ implements {{Web kaynağı}} (:tr:Şablon:Web_kaynağı)
         journal_es = cite_journal_es,
         news_es = cite_news_es,												    -- es:Plantilla:Cita news
         web_es = cite_web_es,													-- es:Plantilla:Cita web
+        noticia_es = cite_news_es,
 
 -- Swedish
         bokref_sv = cite_book_sv,												-- sv:Mall:Bokref
@@ -1797,7 +1833,10 @@ implements {{Web kaynağı}} (:tr:Şablon:Web_kaynağı)
 
 -- Russian
 --         ['Книга_ru'] = cite_book_ru
-        book_ru = cite_book_ru
+        book_ru = cite_book_ru,
+        journal_ru = cite_journal_ru,
+        media_ru = cite_media_ru,
+        wayback_ru = cite_web_ru
     }
 
     local choice = template_name:lower() .. '_' .. lang;

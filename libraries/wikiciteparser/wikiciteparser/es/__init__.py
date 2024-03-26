@@ -5,5 +5,6 @@ citation_template_names = set([
     "cita publicación",
     "cita libro",
     "cita news",
+    "cita noticia",
     "cita web"
     ])

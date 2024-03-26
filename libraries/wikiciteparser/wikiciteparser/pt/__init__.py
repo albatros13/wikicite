@@ -3,7 +3,8 @@
 # taken from https://en.wikipedia.org/wiki/Help:Citation_Style_1
 citation_template_names = set([
     "citar livro",
-    "citar jornal"
+    "citar jornal",
     "citar web",
-    "citar periódico"
+    "citar periódico",
+    "link"
     ])

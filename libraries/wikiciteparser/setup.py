@@ -81,7 +81,7 @@ setup(
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
     package_data={
-            'wikiciteparser': ['cs1.lua'],
+            'wikiciteparser': ['cs1.lua', 'cs1-translator.lua', 'cs1-translator-data.lua'],
     },
 
     # Although 'package_data' is the preferred approach, in some case you may

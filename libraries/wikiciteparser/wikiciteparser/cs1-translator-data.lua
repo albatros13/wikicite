@@ -245,6 +245,7 @@ local params_main_t = {
 		['spalten'] = nil,														-- special case; no cs1|2 equivalent; see at_make()
 		['tag'] = nil,															-- day; defined as 'outdated' at de.wiki; retained here just because
 		['titel'] = 'title',
+		['text'] = 'title',                                                     -- NK for webarchiv
 		['titelerg'] = 'type',
 		['typ'] = nil,															-- in Vorlage:Literatur takes 'wl' as only valid value; same as cs1|2 |display-authors=0?
 		['verlag'] = 'publisher',
@@ -372,7 +373,8 @@ local params_main_t = {
 		['máscaraautor#'] = 'author-mask#',
 		['máscara-autor#'] = 'author-mask#',
 		['apellido#'] = 'last#',
-		['apellidos#'] = nil,													-- no cs1|2 equivalent: |authors#= or |lasts#=
+-- 		['apellidos#'] = nil,													-- no cs1|2 equivalent: |authors#= or |lasts#=
+		['apellidos#'] = 'last#',												-- NK often used for single author
 		['apellido-editor#'] = 'editor-last#',
 		['apellidos-editor#'] = nil,											-- no cs1|2 equivalent: |editors#=
 		['autor#'] = 'author#',
@@ -1346,7 +1348,8 @@ local params_main_t = {
 	-- enumerated parameters; non-enumerated forms of these parameters created by build_params_main_t()
 		['apelido#'] = 'last#',
 		['apellido#'] = 'last#',
-		['apellidos#'] = nil,													-- no cs1|2 equivalent: plural |lasts#=
+-- 		['apellidos#'] = nil,													-- no cs1|2 equivalent: plural |lasts#=
+   	    ['apellidos#'] = 'last#',												-- NK often used for single author
 		['author#mask'] = 'author#-mask',
 		['authormask#'] = 'author-mask#',
 		['autor#'] = 'author#',
@@ -1428,6 +1431,10 @@ local params_main_t = {
 		['номер'] = nil,														-- edition number?
 		['archiveurl'] = 'archive-url',
 		['archivedate'] = 'archive-date',
+
+-- 		NK added
+        ['русназ'] = 'trans-title',
+        ['оригназ'] = 'title'
 		},
 
 	sv = {																		-- from sv:Mall:Webbref (web), sv:Mall:Bokref (book), sv:Mall:Tidskriftsref (journal)
@@ -2018,7 +2025,7 @@ parameter names are normalized to lowercase.
 
 ]]
 
-local params_identifiers_t = {															-- identifier parameters (|ID=, |URN=, etc) and their associated labels for inclusion in |id=
+local params_identifiers_t = {													-- identifier parameters (|ID=, |URN=, etc) and their associated labels for inclusion in |id=
 	de = {																		-- German
 		{'id'},																	-- |id= does not get a label so nil
 		{'urn', '[[Uniform Resource Name|URN]]'},
